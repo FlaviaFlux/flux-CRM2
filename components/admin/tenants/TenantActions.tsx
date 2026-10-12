@@ -78,8 +78,22 @@ export function TenantActions({ organization, counts }: TenantActionsProps) {
           </Button>
         )}
 
-        {/* Reactivate */}
+        {/* O tipo da suspensão (D-6, spec da cobrança §9). A de cobrança sai pelo
+            card Cobrança (Dar prazo / Tornar isenta); a rota /reactivate a recusa
+            com `suspensao_de_cobranca`, então o botão genérico some para ela. */}
         {isSuspended && (
+          <p data-testid="tipo-da-suspensao" className="text-sm font-medium">
+            {suspensaPorCobranca ? t("Suspensa por falta de pagamento") : t("Suspensão administrativa")}
+          </p>
+        )}
+        {suspensaPorCobranca && (
+          <p className="text-xs text-muted-foreground">
+            {t("Para reativar, use o card Cobrança: Dar prazo ou Tornar isenta.")}
+          </p>
+        )}
+
+        {/* Reactivate — só a administrativa */}
+        {isSuspended && !suspensaPorCobranca && (
           <Button
             className="w-full"
             variant="outline"

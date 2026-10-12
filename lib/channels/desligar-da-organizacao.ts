@@ -24,7 +24,7 @@
  *
  * Se a tentativa MORRE depois do commit (resposta perdida, processo
  * reiniciado), o inventário em memória some junto. A lápide da exclusão
- * guarda os identificadores sem segredo de cada canal (migration 0556), e
+ * guarda os identificadores sem segredo de cada canal (migration 0614), e
  * `inventarioDaLapide` os devolve para a nova tentativa: a sessão por QR e a
  * voz voltam a ser desligáveis; o número oficial não — o token só existia na
  * memória da tentativa que morreu —, e vai para o registro como `falhou`, com
