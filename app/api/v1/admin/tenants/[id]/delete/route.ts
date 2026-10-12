@@ -7,7 +7,7 @@
  *    precisa estar SUSPENSA, e não por cobrança (409
  *    `exclusao_com_cobranca_pendente`); o corpo traz o slug digitado como
  *    confirmação e o motivo (vai para a lápide da auditoria);
- *  - no banco (`fn_excluir_organizacao`, migration 0556): as mesmas três
+ *  - no banco (`fn_excluir_organizacao`, migration 0614): as mesmas três
  *    condições conferidas de novo, dentro da transação.
  *
  * O procedimento inteiro — ler as credenciais, a transação, desligar canais e
@@ -49,6 +49,8 @@ const STATUS_DA_RECUSA: Record<ExclusaoRecusada["codigo"], number> = {
   not_found: 404,
   state_conflict: 409,
   exclusao_com_cobranca_pendente: 409,
+  exclusao_com_assinatura_viva: 409,
+  provedor_indisponivel: 503,
   confirmacao_divergente: 400,
   motivo_curto: 400,
 };

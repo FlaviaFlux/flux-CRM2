@@ -115,6 +115,11 @@ function adminFalso(c: Cenario) {
           webhook_subscriptions: { "order/created": { id: 77 } },
         });
       }
+      if (tabela === "cobranca_assinaturas") {
+        // Empresa sem linha de cobrança (isenta): a releitura de #2626 lê a
+        // linha, não acha, e não chama o provedor.
+        return leituraSimples(null);
+      }
       throw new Error(`tabela inesperada: ${tabela}`);
     },
     rpc: vi.fn(async (fn: string, args?: unknown) => {
@@ -319,6 +324,23 @@ describe("o banco recusou — nada lá fora caiu", () => {
       codigo: "exclusao_com_cobranca_pendente",
     });
     expect(tocouTransporte()).toBe(false);
+  });
+
+  it("PT409 organizacao_com_assinatura_viva (gatilho da 0601, suspensa pelo administrador): código e mensagem próprios", async () => {
+    const admin = adminFalso({
+      status: "suspended",
+      rpcErro: { code: "PT409", message: "organizacao_com_assinatura_viva" },
+    });
+    const recusa = await excluirOrganizacao(admin as never, entrada).catch((e: unknown) => e);
+    expect(recusa).toBeInstanceOf(ExclusaoRecusada);
+    expect(recusa).toMatchObject({ codigo: "exclusao_com_assinatura_viva" });
+    const mensagem = (recusa as Error).message;
+    expect(mensagem).toMatch(/assinatura ativa/);
+    expect(mensagem).toMatch(/Cancele a assinatura antes de excluir/);
+    // As duas frases erradas para este caso: não é falta de pagamento, e a org segue suspensa.
+    expect(mensagem).not.toMatch(/falta de pagamento|não está mais suspensa/);
+    expect(tocouTransporte()).toBe(false);
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("a resposta da rpc se perdeu (sem código): ExclusaoInterrompida — o commit pode ter acontecido, 'nada foi apagado' seria falso", async () => {

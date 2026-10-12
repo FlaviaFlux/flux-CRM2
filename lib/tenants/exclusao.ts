@@ -2,11 +2,25 @@
  * EXCLUSÃO DE UMA ORGANIZAÇÃO — o procedimento inteiro, na ordem que não deixa
  * órfão.
  *
- * O banco faz a parte transacional (`fn_excluir_organizacao`, migration 0556):
+ * O banco faz a parte transacional (`fn_excluir_organizacao`, migration 0614):
  * lápide na auditoria, cascata em ~155 tabelas, conferência de que nada ficou.
  * O que mora FORA do Postgres não entra numa transação, e por isso a ordem é o
  * desenho:
  *
+ *   0. RELER O PROVEDOR DE COBRANÇA — antes de qualquer transação. A trava da
+ *      migration 0601 (`trg_cobranca_trava_exclusao_com_assinatura_viva`)
+ *      decide pela LINHA de `cobranca_assinaturas`, e a linha diz o que a
+ *      ÚLTIMA releitura gravou (`sincronizar`). Sem reler aqui, uma assinatura
+ *      que voltou a ficar viva depois daquela gravação passava pela trava — e
+ *      uma que o provedor cancelou continuava bloqueando (#2626). Quem grava é
+ *      `sincronizar`, o único lugar que grava a releitura; com a empresa
+ *      suspensa pelo administrador (a pré-condição abaixo) a régua devolve
+ *      `nada`, então o efeito desta chamada é a releitura fresca na linha.
+ *      Leitura que FALHA recusa a exclusão (503 `provedor_indisponivel`), como a
+ *      isenção recusa (`app/api/v1/admin/tenants/[id]/assinatura/route.ts`): a
+ *      exclusão é irreversível e a cascata leva junto o `provedor_cliente_id`,
+ *      então excluir pelo último estado gravado deixaria o provedor cobrando
+ *      sem ninguém aqui para cancelar.
  *   1. ANTES do banco, só LER o que o desligamento vai precisar — as linhas dos
  *      canais (`inventariarCanaisDaOrganizacao`, em
  *      `lib/channels/desligar-da-organizacao.ts`), a sessão de voz e a conexão
@@ -46,7 +60,7 @@
  * SUSPENSA, a suspensão é ADMINISTRATIVA (a por cobrança é recusada — excluir
  * deixaria a assinatura cobrando no provedor) e a confirmação é o slug dela.
  * Aqui se olha só o tipo; o banco olha também o histórico da suspensão atual,
- * porque uma administrativa por cima da cobrança troca o tipo (migration 0556)
+ * porque uma administrativa por cima da cobrança troca o tipo (migration 0614)
  * — essa recusa chega como `PT409 organizacao_com_cobranca_pendente`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -60,6 +74,7 @@ import {
   type CanalNaLapide,
   type InventarioDeCanais,
 } from "@/lib/channels/desligar-da-organizacao";
+import { sincronizar } from "@/lib/cobranca/sincronizar";
 import { logger } from "@/lib/logger";
 import { NuvemshopApiClient } from "@/lib/nuvemshop/api-client";
 import { desligarSessaoDeVozNoTransporte } from "@/lib/voice/desparear";
@@ -85,6 +100,8 @@ export class ExclusaoRecusada extends Error {
       | "not_found"
       | "state_conflict"
       | "exclusao_com_cobranca_pendente"
+      | "exclusao_com_assinatura_viva"
+      | "provedor_indisponivel"
       | "confirmacao_divergente"
       | "motivo_curto",
     message: string,
@@ -106,7 +123,7 @@ export class ExclusaoInterrompida extends Error {
   }
 }
 
-/** O que a lápide da migration 0556 guarda e a retomada lê. */
+/** O que a lápide da migration 0614 guarda e a retomada lê. */
 interface LapideDaExclusao {
   slug: string;
   contagens?: Record<string, number>;
@@ -139,6 +156,20 @@ function mensagemDe(err: unknown): string {
 
 const MENSAGEM_DE_COBRANCA =
   "Esta empresa está suspensa por falta de pagamento. Excluí-la deixaria a assinatura cobrando no provedor: resolva a cobrança antes.";
+
+/** A releitura do provedor falhou: a exclusão recusa em vez de decidir pelo estado gravado. */
+const MENSAGEM_DE_PROVEDOR_INDISPONIVEL =
+  "Não foi possível confirmar com o provedor de cobrança se esta empresa ainda tem assinatura ativa. Nada foi apagado. Tente de novo; se persistir, confira a conexão do provedor em Cobrança.";
+
+/**
+ * A recusa do gatilho da migration 0601 (`organizacao_com_assinatura_viva`).
+ * A suspensão por cobrança já foi recusada antes, então quem chega aqui é a
+ * empresa suspensa pelo ADMINISTRADOR que ainda tem assinatura viva no
+ * provedor — "falta de pagamento" seria falso, e "não está mais suspensa"
+ * também.
+ */
+const MENSAGEM_DE_ASSINATURA_VIVA =
+  "Esta empresa ainda tem assinatura ativa no provedor de cobrança. Cancele a assinatura antes de excluir: excluí-la agora deixaria o provedor cobrando sem ninguém aqui para cancelar.";
 
 /** Passo 3 — a voz é por organização, não por canal; o id veio do inventário. */
 async function desligarVoz(orgId: string, sessaoDeVoz: string | null): Promise<DesfechoExterno> {
@@ -324,6 +355,20 @@ export async function excluirOrganizacao(
     );
   }
 
+  // 0. RELER O PROVEDOR ANTES DA RPC — a trava da migration 0601 lê a linha de
+  //    `cobranca_assinaturas` (o que a última releitura gravou), e sem esta
+  //    releitura ela decidiria pelo passado: assinatura que voltou a viver
+  //    passaria, e a cancelada continuaria bloqueando (#2626). `sincronizar` é
+  //    quem grava (compare-and-set em `relida_em`); a régua, aqui, é `nada`,
+  //    porque a pré-condição acima só deixa seguir com suspensão
+  //    administrativa. Leitura que falha (`ultimo_erro` gravado,
+  //    `cobranca.leitura_falhou` no log) RECUSA: a exclusão é irreversível e o
+  //    último estado gravado pode ser justamente o que mudou.
+  const releitura = await sincronizar(admin, entrada.orgId);
+  if (releitura.tipo === "falhou") {
+    throw new ExclusaoRecusada("provedor_indisponivel", MENSAGEM_DE_PROVEDOR_INDISPONIVEL);
+  }
+
   // 1. Só leitura: o que o desligamento vai precisar, antes que a cascata
   // apague as linhas. Nada externo é tocado aqui.
   const inventario = await inventariarCanaisDaOrganizacao(admin, entrada.orgId);
@@ -349,6 +394,8 @@ export async function excluirOrganizacao(
     // cima daria. Nada lá fora foi tocado.
     if (rpcErr.code === "PT409" && rpcErr.message === "organizacao_com_cobranca_pendente")
       throw new ExclusaoRecusada("exclusao_com_cobranca_pendente", MENSAGEM_DE_COBRANCA);
+    if (rpcErr.code === "PT409" && rpcErr.message === "organizacao_com_assinatura_viva")
+      throw new ExclusaoRecusada("exclusao_com_assinatura_viva", MENSAGEM_DE_ASSINATURA_VIVA);
     if (rpcErr.code === "PT409")
       throw new ExclusaoRecusada("state_conflict", "A organização não está mais suspensa.");
     if (rpcErr.code === "PT404")
@@ -455,7 +502,7 @@ async function concluirDepoisDoCommit(
     // 6. O registro final. `organizationId` nulo: a organização não existe mais.
     // Ele e a lápide são achados por `resource_id`; as linhas antigas da org,
     // que perderam a atribuição no SET NULL, só são DELIMITADAS pela lápide
-    // (membros, contagem e intervalo) — ver o cabeçalho da migration 0556.
+    // (membros, contagem e intervalo) — ver o cabeçalho da migration 0614.
     await audit({
       action: "organization.deletion_completed",
       actorUserId: entrada.atorId,

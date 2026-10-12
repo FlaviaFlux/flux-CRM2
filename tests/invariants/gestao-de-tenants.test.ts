@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 /**
- * Gestão de tenants pelo admin da plataforma (migration 0556).
+ * Gestão de tenants pelo admin da plataforma (migration 0614).
  *
  * O que só o Postgres consegue provar, porque mora em função SECURITY DEFINER
  * e cascata de FK:

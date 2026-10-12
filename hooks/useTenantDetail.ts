@@ -20,7 +20,8 @@ export interface TenantOrganization {
   suspended_at: string | null;
   // Só significa algo com status='suspended'; nulo vale como administrativa.
   // A exclusão recusa a suspensão por cobrança (`lib/tenants/exclusao.ts`).
-  suspended_kind: TipoDeSuspensao | null;
+  // Opcional: fixtures antigas não o têm.
+  suspended_kind?: TipoDeSuspensao | null;
   created_at: string;
   settings: Record<string, unknown> | null;
   // Dados cadastrais editáveis (os mesmos de Configurações › Empresa).
@@ -29,6 +30,8 @@ export interface TenantOrganization {
   locale: string | null;
   currency: string | null;
   media_retention_days: number | null;
+  // Interruptor da limpeza de mídia (0557). Nulo não vem do banco (not null
+  // default true); o tipo aceita para fixtures que não o declaram.
   media_retention_enforced: boolean | null;
   dpo_email: string | null;
   privacy_policy_url: string | null;

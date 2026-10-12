@@ -173,7 +173,10 @@ test("corrigir o e-mail, ver o aviso na Central, editar, recusar a exclusão por
     .eq("id", orgId);
   if (porCobranca.error) throw porCobranca.error;
   await admin.reload();
-  await expect(admin.getByRole("button", { name: "Reativar tenant" })).toBeVisible({ timeout: 15_000 });
+  // A main esconde "Reativar tenant" na suspensão por cobrança (a saída é o card
+  // Cobrança); o sinal de que a tela recarregou é o tipo da suspensão.
+  await expect(admin.getByTestId("tipo-da-suspensao")).toHaveText("Suspensa por falta de pagamento", { timeout: 15_000 });
+  await expect(admin.getByRole("button", { name: "Reativar tenant" })).toHaveCount(0);
   await expect(admin.getByRole("button", { name: "Excluir tenant" })).toHaveCount(0);
   await expect(
     admin.getByText("Suspensa por falta de pagamento: não pode ser excluída enquanto houver cobrança pendente."),
