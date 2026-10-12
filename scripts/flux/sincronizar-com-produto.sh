@@ -97,7 +97,24 @@ Nada foi mesclado na \`main\` e a VPS não foi tocada. Alguém precisa olhar o P
       exit 0
     fi
   done
-  gh pr merge "$PR" --repo "$FORK" --merge
+  # Merge negado com o CI verde é quase sempre permissão do SYNC_TOKEN — medido
+  # em 12/10/2026 na v1.80.0: "Resource not accessible by personal access
+  # token (mergePullRequest)", porque o PR trazia mudança em .github/workflows/
+  # e o token não tinha Workflows em escrita. Sem esta guarda a falha ficava só
+  # na aba Actions; com ela vira issue, como os outros casos que pedem alguém.
+  if ! SAIDA_MERGE="$(gh pr merge "$PR" --repo "$FORK" --merge 2>&1)"; then
+    abrir_issue "Sincronização com o produto $TAG: CI verde, mas o merge do PR #$PR foi negado" \
+"O PR #$PR passou nos checks obrigatórios, mas a automação não conseguiu mesclá-lo:
+
+\`\`\`
+$SAIDA_MERGE
+\`\`\`
+
+Causa provável: falta permissão no token \`SYNC_TOKEN\` (conta FlaviaFlux › Settings › Developer settings › Fine-grained tokens). Ele precisa de **Contents**, **Pull requests**, **Issues** e **Workflows** em *Read and write* — sem **Workflows**, o GitHub recusa mesclar PR que mexe em \`.github/workflows/\`, o que quase toda release do produto faz.
+
+Saída imediata: mesclar o PR #$PR pela tela e criar a release \`$RELEASE\` (ou rodar o workflow *sincronizar-com-produto* de novo depois do merge: ele cria a release sozinho). Depois de corrigir o token, feche esta issue."
+    exit 0
+  fi
   log "PR #$PR mesclado."
   git fetch --quiet origin main
   criar_release_se_faltar
