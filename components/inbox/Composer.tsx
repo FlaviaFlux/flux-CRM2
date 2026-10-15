@@ -28,10 +28,15 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { X } from "lucide-react";
+import { toast } from "sonner";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
-import { interpolateTemplate } from "@/lib/inbox/template-vars";
+import {
+  interpolateTemplate,
+  motivoDoCuringaLiteral,
+  type TemplateContact,
+} from "@/lib/inbox/template-vars";
 import {
   type AvisoDeRascunho,
   type MotivoDeRecusa,
@@ -99,6 +104,12 @@ interface Props {
   onCancelarResposta?: () => void;
   /** Nome do contato da conversa, para interpolar {{nome}}/{{primeiro_nome}} do template escolhido. */
   contactName?: string | null;
+  /**
+   * Rótulo do canal (`contacts.display_name`), fallback quando `contactName`
+   * é vazio (issue #2744). Contato criado pela ingestão do canal ainda não tem
+   * `name` gravado, e o template não podia mandar `{{nome}}` literal pro cliente.
+   */
+  contactDisplayName?: string | null;
   /** Contato da conversa — excluído do seletor de cartão compartilhado. */
   currentContactId?: string | null;
   /**
@@ -120,6 +131,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     blockedReason,
     janelaFechada,
     contactName,
+    contactDisplayName,
     currentContactId,
     respondendo,
     onCancelarResposta,
@@ -176,6 +188,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
 
+  /**
+   * O contato da conversa, do jeito que a interpolação e o gate do curinga
+   * (#2744) precisam: o `name` do CRM e o `display_name` do canal. Um objeto,
+   * um lugar — o `applyTemplate` e a trava leem da MESMA fonte.
+   */
+  const contato: TemplateContact = {
+    name: contactName ?? null,
+    displayName: contactDisplayName ?? null,
+  };
+
   // SÓ em nota: a menção é assunto interno, e uma menção no campo de resposta
   // sairia para o cliente como texto solto. A query roda enquanto a lista está
   // aberta — fechou o `@`, não há porque ir buscar os atendentes.
@@ -196,6 +218,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // nota interna nunca chega ao cliente, e é onde o atendente registra por que
   // a conversa esfriou — barrá-la tira exatamente o que ainda dá para fazer.
   const respostaBarrada = isDisabled || (mode === "reply" && !!janelaFechada);
+
+  /**
+   * O curinga literal (#2744, opção A) — um SINAL IRMÃO do `janelaFechada`, e
+   * não um termo a mais no `respostaBarrada`.
+   *
+   * A diferença é o CAMPO: `respostaBarrada` desabilita o `<textarea>` (a janela
+   * fechada não tem o que editar), mas o curinga literal PEDE edição — o motivo
+   * que a faixa mostra é "edite antes de enviar". Travar o campo aqui seria
+   * negar a própria instrução. Então só o ENVIO é barrado; o operador continua
+   * digitando, apaga o `{{nome}}` e manda.
+   *
+   * Só em RESPOSTA: a nota interna nunca chega ao cliente e passa — a mesma
+   * fronteira do `janelaFechada`. Contato com nome não entra (o curinga resolve);
+   * `{{codigo}}` cru também não (chave desconhecida não é problema de nome).
+   */
+  const motivoCuringa = mode === "reply" ? motivoDoCuringaLiteral(text, contato) : null;
+  // O que trava o ENVIO: o de sempre, mais o curinga. O que trava o CAMPO
+  // (`respostaBarrada`) NÃO recebe o curinga — ver acima.
+  const envioBarrado = respostaBarrada || !!motivoCuringa;
 
   /** Escolhe o arquivo e MARCA o modo da escolha (ver `pendingEm`). */
   function escolherArquivo(file: File) {
@@ -237,7 +278,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   function handleSubmit() {
     const legivel = text.trim();
-    if (!legivel || (mode === "note" ? isDisabled : respostaBarrada)) return;
+    if (!legivel || (mode === "note" ? isDisabled : envioBarrado)) return;
 
     // A menção vira token AQUI, na saída do campo (#2372): o que fica no
     // rascunho, no `onDraftChange` e no `restoreOnError` é o nome legível, e
@@ -327,9 +368,18 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       });
   }
 
-  function applyTemplate(t: MessageTemplate) {
-    const filled = interpolateTemplate(t.body, { name: contactName ?? null });
+  function applyTemplate(tpl: MessageTemplate) {
+    const filled = interpolateTemplate(tpl.body, contato);
     setText(filled);
+    // Contato sem `name` NEM `display_name`: o literal sobrevive no texto e iria
+    // pro cliente como `{{nome}}`. O toast é o primeiro aviso; a faixa
+    // persistente (mais abaixo) é o que fica, porque o operador precisa editar
+    // antes de mandar (#2744).
+    if (motivoDoCuringaLiteral(tpl.body, contato)) {
+      toast.warning(
+        t("Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar."),
+      );
+    }
     setMenuDismissed(true);
     const ta = taRef.current;
     if (!ta) return;
@@ -462,6 +512,22 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               ) : (
                 avisoDeRascunhoIndisponivel(rascunho.leitura.motivo, t)
               )}
+            </p>
+          </div>
+        )}
+        {/* O AVISO DO CURINGA LITERAL (#2744) — visível e PERSISTENTE, e não só
+            o toast que some. Vale para o texto DIGITADO, não só para o modelo
+            aplicado: quem escreveu `{{primeiro_nome}}` na mão precisa ver por
+            que o botão não manda, junto da borda do compositor. Só em RESPOSTA
+            (modo nota passa), e só com o literal sobrevivente — contato com
+            nome resolve o curinga e não vê aviso nenhum. */}
+        {motivoCuringa && (
+          <div
+            data-testid="aviso-curinga-literal"
+            className="mb-1.5 flex items-start gap-2 rounded-md border-l-2 border-warning bg-warning-bg px-2 py-1.5 text-xs text-warning-fg"
+          >
+            <p className="min-w-0 flex-1">
+              {t("Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.")}
             </p>
           </div>
         )}
@@ -617,7 +683,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               size="icon"
               className="h-9 w-9 shrink-0"
               onClick={handleSubmit}
-              disabled={(mode === "note" ? isDisabled : respostaBarrada) || !text.trim()}
+              disabled={(mode === "note" ? isDisabled : envioBarrado) || !text.trim()}
               aria-label={t("Enviar")}
             >
               <PaperPlaneTilt size={16} weight="fill" aria-hidden />

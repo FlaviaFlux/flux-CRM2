@@ -97,6 +97,20 @@ if [[ "${mem_kb:-0}" -lt "$RAM_MINIMA_KB" && "${SINGLE_SERVER_ALLOW_LOW_MEMORY:-
   die "O modo single-server exige pelo menos 4 GB de RAM e recomenda 8 GB. Esta VPS tem aproximadamente $((mem_kb / 1024)) MB."
 fi
 
+# Cloudflare Tunnel não combina com o Supabase self-hosted: neste modo é o Caddy
+# que publica as seis APIs do Supabase (Auth, REST, Realtime, Storage...) pelo
+# Caddyfile.single-server. Com o Caddy desligado, o túnel não tem para onde
+# mandar /auth/v1* e o CRM sobe sem conseguir logar. Recusa ANTES de gerar
+# segredo, baixar imagem ou subir contêiner — falha cedo e barata.
+_rp_cloudflared="${REVERSE_PROXY:-}"
+if [[ -z "$_rp_cloudflared" && -f "$ROOT_DIR/.env" ]]; then
+  _rp_cloudflared="$(ler_env "$ROOT_DIR/.env" REVERSE_PROXY)"
+fi
+if [[ "$_rp_cloudflared" == "cloudflared" ]]; then
+  die "O modo single-server não suporta REVERSE_PROXY=cloudflared: as APIs do Supabase dependem do Caddy. Use o proxy padrão (Caddy), ou o Cloudflare Tunnel apenas com o Supabase na nuvem."
+fi
+unset _rp_cloudflared
+
 # Invariante 8 (docs/doctrine/packaging.md), ANTES de baixar ou subir qualquer
 # coisa: uma segunda árvore do CRM na VPS não sobe um Supabase por cima do da
 # primeira, nem deixa um Supabase órfão para o install.sh recusar depois.
@@ -140,11 +154,12 @@ set_env_var "$supabase_env" SITE_URL "https://${domain}"
 set_env_var "$supabase_env" ADDITIONAL_REDIRECT_URLS "https://${domain}/auth/confirm,https://${domain}/**"
 # ── E-mails de acesso: o GoTrue busca o MOLDE no app (#2109) ────────────────
 # A função mora no _common.sh porque o update.sh também a chama, para quem
-# instalou antes deste conserto (o porquê está lá). Gravada ANTES do
+# instalou antes deste conserto (o porquê está lá). A base é a INTERNA do app,
+# pela rede privada, e não o domínio público (#2587, o porquê também está lá). Gravada ANTES do
 # `dc_supabase up -d --wait` de baixo: no primeiro boot o auth já nasce
 # configurado, e numa re-execução o compose recria o contêiner cujo ambiente
 # mudou.
-gravar_modelos_do_gotrue "$supabase_env" "https://${domain}"
+gravar_modelos_do_gotrue "$supabase_env" "$BASE_INTERNA_DO_APP"
 # Confirmacao de e-mail fica LIGADA: sem ela qualquer pessoa cria conta com
 # um e-mail que nao e dela. Fixada aqui, e nao herdada do default do Supabase,
 # para que um bump do SUPABASE_REF nao a desligue calado. Vigiado por

@@ -31,6 +31,13 @@ nenhuma**. O Traefik deixa de enxergá-lo e o domínio inteiro passa a responder
 `404 page not found` — não é erro do Next, é o 404 genérico do Traefik. A app
 está no ar, saudável, e inalcançável.
 
+**Atrás do proxy do Coolify o mesmo defeito tem outra cara:** no `https` o domínio
+responde **`503`** com o corpo `no available server` (é a rota "catchall" do
+Coolify), e no `http`, `404`. Medido em 07/10/2026
+([`evidence/2026-10-07-coolify-consumo/`](../../evidence/2026-10-07-coolify-consumo/README.md),
+`21b-coolify-503-catchall.txt` traz os códigos, `47-g3-remocao.txt` o corpo); quem procura só o `404` conclui que o roteamento
+está bom.
+
 ---
 
 ## 2. Verificação pós-deploy (não pule)
@@ -53,6 +60,7 @@ docker inspect "$(docker compose -f docker-compose.prod.yml ps -q app)" \
 curl -s -o /dev/null -w "%{http_code}\n" https://<DOMAIN>/
 # esperado: 200 (a página inicial pública; 307 para quem já tem sessão)
 # 404      = labels perdidas, refaça o deploy com os dois -f
+#            (atrás do Coolify: 503 "no available server"; lá são TRÊS -f, ver docs/saas/coolify.md)
 curl -s -o /dev/null -w '%{http_code}\n' https://<DOMAIN>/app
 # esperado: 307 (para /login) — o sinal de que quem responde é o app, e não
 #           outra coisa no domínio que também daria 200 em /
@@ -133,3 +141,49 @@ stack em operação, não o WAHA isolado — e a folga existe justamente porque 
 parcela por sessão não é conhecida com precisão.
 
 Ao terminar, feche o ciclo — merge na `main` e volte a VPS pra imagem oficial.
+
+---
+
+## 5. Atrás de NAT — Cloudflare Tunnel
+
+Quando a VPS está atrás de NAT (ou de CGNAT, ou numa rede que proíbe entrada), **nada
+publica 80/443** e o Caddy nunca obtém certificado Let's Encrypt. A saída é o Cloudflare
+Tunnel: o contêiner `cloudflared` abre uma conexão de saída para a borda da Cloudflare, e
+é ela que atende o domínio. Nenhuma porta de entrada é necessária.
+
+O comando leva o override do túnel (o Caddy fica desligado por profile):
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.cloudflared.yml --env-file .env up -d
+```
+
+O kit faz isso sozinho quando o `.env` diz `REVERSE_PROXY=cloudflared` — inclusive no
+`update.sh`. A configuração do túnel **não mora no repo**: é administrada no painel
+(Zero Trust > Networks > Tunnels). O `.env` guarda só o token:
+
+```env
+REVERSE_PROXY=cloudflared
+CLOUDFLARE_TUNNEL_TOKEN=<token do túnel>
+```
+
+Passos no painel:
+
+1. crie o túnel e copie o token para `CLOUDFLARE_TUNNEL_TOKEN`;
+2. em **Public Hostnames**, aponte o domínio para o serviço `http://app:3000` (nome
+   `app`, **não** `https` e **não** o IP do host — o TLS termina na Cloudflare);
+3. aponte `DOMAIN`, `NEXT_PUBLIC_APP_URL` e `NEXT_PUBLIC_ADMIN_URL` para esse mesmo
+   hostname (`https://…`) e liste-o nos redirects do Supabase Auth;
+4. (opcional) bloqueie `/api/v1/webhooks/waha` também no WAF (`Security > WAF > Custom
+   rules`). Neste modo o 403 que o Caddy dava não existe; quem recusa o que chega pela borda
+   é o próprio app — ver `docs/threat-model.md` §1.1.
+
+Notas:
+
+- **Single-server (Supabase self-hosted) não é suportado.** O instalador recusa
+  `REVERSE_PROXY=cloudflared` nesse modo: as APIs do Supabase dependem do Caddy.
+- A borda da Cloudflare corta HTTP acima de ~100s (504/524). O webhook do WAHA é interno e
+  não passa pelo túnel. O runner do agente (`/api/internal/agents/run`) passa: o dispatcher o
+  chama pelo endereço público (`NEXT_PUBLIC_APP_URL`). O disparo não espera a resposta, mas uma
+  execução acima de 100s esbarra no teto — o efeito disso no app não foi medido.
+- Verificação: `docker compose -f docker-compose.prod.yml -f docker-compose.cloudflared.yml
+  --env-file .env config --services` deve listar `cloudflared` e **não** listar `caddy`.
