@@ -11,6 +11,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_i18n.sh"
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
+COMPOSE_CLOUDFLARED="docker-compose.cloudflared.yml"
 # Overlay que constrói as imagens no lugar de puxá-las. Existe no repo com
 # `pull_policy: never` nas três imagens e sai do MESMO commit que o `git
 # checkout` deixou no disco — é o caminho de quem não consegue usar as imagens
@@ -241,6 +242,14 @@ unset _deskcomm_chamador
 #             Docker — o roteamento é manual, na UI dele). Entra o override, que
 #             desliga o Caddy e garante o `app` na rede/IP que o Proxy Host
 #             espera. Ver o cabeçalho de docker-compose.npm.yml.
+#   cloudflared → a instalação está ATRÁS DE NAT: nada pode publicar porta e o
+#             acesso é resolvido pelo Cloudflare Tunnel. Entra o override, que
+#             desliga o Caddy e sobe o `cloudflared` falando com app:3000 pela
+#             rede interna. A configuração do túnel mora no painel da Cloudflare;
+#             o .env guarda só CLOUDFLARE_TUNNEL_TOKEN. Ver o cabeçalho de
+#             docker-compose.cloudflared.yml. NÃO é suportado no single-server
+#             (install-single-server.sh recusa): lá o Caddy publica também as
+#             APIs do Supabase.
 #
 # Todo `docker compose` do kit passa por aqui: com proxy externo, um comando sem
 # o override subiria o Caddy e ele iria bater de frente com o proxy da hospedagem.
@@ -269,6 +278,7 @@ dc() {
   case "${REVERSE_PROXY:-caddy}" in
   traefik) docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" ${ca[@]+"${ca[@]}"} "$@" ;;
   npm)     docker compose -f "$COMPOSE" -f "$COMPOSE_NPM" ${ca[@]+"${ca[@]}"} "$@" ;;
+  cloudflared) docker compose -f "$COMPOSE" -f "$COMPOSE_CLOUDFLARED" ${ca[@]+"${ca[@]}"} "$@" ;;
   *)       docker compose -f "$COMPOSE" ${ca[@]+"${ca[@]}"} "$@" ;;
   esac
 }
@@ -298,6 +308,7 @@ dc_files() {
   case "${REVERSE_PROXY:-caddy}" in
   traefik) printf -- '-f %s -f %s%s' "$COMPOSE" "$COMPOSE_TRAEFIK" "$sufixo" ;;
   npm)     printf -- '-f %s -f %s%s' "$COMPOSE" "$COMPOSE_NPM" "$sufixo" ;;
+  cloudflared) printf -- '-f %s -f %s%s' "$COMPOSE" "$COMPOSE_CLOUDFLARED" "$sufixo" ;;
   *)       printf -- '-f %s%s' "$COMPOSE" "$sufixo" ;;
   esac
 }
@@ -528,23 +539,37 @@ sincronizar_signup_mode_do_gotrue() {
 # vezes: no .env do Supabase, que o compose interpola, e no
 # `supabase-single-server.override.yml`, que as entrega ao contêiner.
 #
-# Chamada pelo install-single-server.sh (com o domínio que ele recebeu) e por
-# atualizar_supabase_single_server (sem domínio: sai do SITE_URL que o
-# instalador gravou como https://DOMINIO). Valor já presente — no .env do
-# Supabase ou no ambiente — manda: nada sobrescreve um molde que o operador já
-# apontou. Sem URL https para montar o caminho, não grava nada: um molde
-# apontado para `localhost` seria pior que o padrão.
-gravar_modelos_do_gotrue() {  # gravar_modelos_do_gotrue <.env do Supabase> [https://DOMINIO]
-  local env_sb="$1" base="${2:-}" chave caminho valor
+# Chamada pelo install-single-server.sh e por atualizar_supabase_single_server,
+# os dois com BASE_INTERNA_DO_APP (#2587): no single-server o auth está na rede
+# privada `deskcomm_private`, onde o app atende pelo nome do serviço. Pelo
+# domínio público a busca sai pelo IP da própria VPS, e atrás de um Traefik
+# externo esse retorno (hairpin) não existe: o GoTrue dá timeout e o e-mail de
+# recuperação não sai.
+#
+# A guarda aceita https:// e EXATAMENTE a base interna — nunca outro http. Um
+# molde apontado para `localhost` seria pior que o padrão: dentro do contêiner
+# do auth, localhost é o próprio auth.
+#
+# Valor já presente — no .env do Supabase ou no ambiente — manda: nada
+# sobrescreve um molde que o operador apontou. A exceção é o padrão ANTIGO do
+# kit, `SITE_URL` + caminho, que o próprio kit gravou antes do #2587: esse é
+# reescrito para a base nova, e é assim que quem já instalou recebe o conserto.
+BASE_INTERNA_DO_APP="http://app:3000"
+gravar_modelos_do_gotrue() {  # gravar_modelos_do_gotrue <.env do Supabase> <https://DOMINIO | BASE_INTERNA_DO_APP>
+  local env_sb="$1" base="${2:-}" site chave caminho valor atual
   [ -f "$env_sb" ] || return 0
-  [ -n "$base" ] || base="$(valor_do_env "$env_sb" SITE_URL)"
-  case "$base" in https://?*) base="${base%/}" ;; *) return 0 ;; esac
+  case "$base" in https://?*|"$BASE_INTERNA_DO_APP") base="${base%/}" ;; *) return 0 ;; esac
+  site="$(valor_do_env "$env_sb" SITE_URL)"; site="${site%/}"
   for chave in GOTRUE_MAILER_TEMPLATES_CONFIRMATION GOTRUE_MAILER_TEMPLATES_RECOVERY; do
-    [ -n "$(valor_do_env "$env_sb" "$chave")" ] && continue
     case "$chave" in
       *CONFIRMATION) caminho=/email-templates/confirmation ;;
       *) caminho=/email-templates/recovery ;;
     esac
+    atual="$(valor_do_env "$env_sb" "$chave")"
+    if [ -n "$atual" ]; then
+      case "$site" in https://?*) ;; *) continue ;; esac
+      [ "$atual" = "${site}${caminho}" ] || continue
+    fi
     valor="${!chave:-}"
     [ -n "$valor" ] || valor="${base}${caminho}"
     set_env_var "$env_sb" "$chave" "$valor"
@@ -646,7 +671,7 @@ atualizar_supabase_single_server() {
   # #2109 — no corpo desta função, e não numa linha do update.sh, pelo mesmo
   # motivo do #1653 logo abaixo. Antes do `up -d --wait`: o compose recria o
   # auth com o ambiente novo, sem reinício à parte.
-  gravar_modelos_do_gotrue "$dir/.env"
+  gravar_modelos_do_gotrue "$dir/.env" "$BASE_INTERNA_DO_APP"
   dc_supabase up -d --wait || return 1
   # #1653 — a sincronização do modo de cadastro mora AQUI, no corpo desta
   # função, e não numa linha do update.sh. Na atualização que traz este
@@ -931,9 +956,10 @@ restaurar_servicos() {
 # que têm `build:`, o Compose reconstrói sozinho (medido, em qualquer falha de
 # pull) — e é construção barata; o pesado é este. Esta função NÃO decide se
 # pode construir: ela constrói. Quem decide é `build_local_permitido` (o portão
-# da #1955, mais abaixo), e só o update.sh o consulta antes de chamar esta
-# função; o install.sh a chama direto. O
-# desfecho visível antes era o pior possível — a atualização não acontecia, o
+# da #1955, mais abaixo), e os DOIS scripts do kit o consultam antes de chamar
+# esta função — o update.sh devolvendo a versão anterior, o install.sh parando
+# com a mensagem da instalação (#2631: ele a chamava direto, sem o portão).
+# O desfecho visível antes era o pior possível — a atualização não acontecia, o
 # script terminava como se tivesse dado certo e o dono só descobria pelo CRM
 # velho. Pelo botão "Atualizar" do site, nem isso: o agente roda sozinho no
 # cron e não há ninguém lendo a tela.
@@ -1038,6 +1064,40 @@ veredito_das_imagens_da_release() {  # veredito_das_imagens_da_release <versão>
   fi
 }
 
+# Qual nome de pacote ESTA máquina usa para o plugin buildx (#2754)?
+#
+# Medido numa VPS Ubuntu com Docker do repositório do próprio Ubuntu: mandar
+# instalar `docker-buildx-plugin` devolve "E: Não é possível encontrar o
+# pacote", porque o Ubuntu publica o plugin como `docker-buildx` — o nome
+# `docker-buildx-plugin` é do repositório oficial do Docker
+# (download.docker.com), que nem precisa estar habilitado aqui. Um preflight
+# que só AVISA virava remediação inútil: o dono rodava o comando errado,
+# levava o erro do apt e voltava pra tela sem saber o que fazer.
+#
+# O nome sai do cache LOCAL do apt (`apt-cache show` não usa rede, só o índice
+# já em disco): é exatamente o que o `apt-get install` desta VPS encontra.
+# Sem apt, ou com os dois nomes fora do cache, devolve os DOIS nomes com a
+# origem de cada um — nunca uma ordem que não se possa executar.
+#
+# A ORDEM importa: `docker-buildx-plugin` é testado PRIMEIRO. Se o repositório
+# do Docker está no índice, o engine quase sempre é `docker-ce` — e, com o
+# universe ligado, o `docker-buildx` do Ubuntu também aparece, mas ele depende
+# de `docker.io`, que conflita com `docker-ce`: o apt recusa a instalação.
+# Medido numa VPS Ubuntu 22.04 com docker-ce 29.8.2 (os dois nomes no índice).
+pacote_do_buildx() {  # → nome do pacote (ou os dois nomes, com a origem)
+  if command -v apt-cache >/dev/null 2>&1; then
+    if apt-cache show docker-buildx-plugin >/dev/null 2>&1; then
+      printf 'docker-buildx-plugin'
+      return 0
+    fi
+    if apt-cache show docker-buildx >/dev/null 2>&1; then
+      printf 'docker-buildx'
+      return 0
+    fi
+  fi
+  printf 'docker-buildx (Ubuntu/Debian) ou docker-buildx-plugin (repositório oficial do Docker)'
+}
+
 # O preflight: dá para atualizar sem derrubar o que está no ar?
 # → 0 = pode seguir; 1 = NÃO pode, com o motivo na stdout.
 #
@@ -1046,7 +1106,7 @@ veredito_das_imagens_da_release() {  # veredito_das_imagens_da_release <versão>
 # qualquer `docker stop` — o `refuse` devolve RC 3, que o agent.sh lê como
 # "esta atualização nunca começou" e não tenta desfazer nada.
 preflight_atualizacao() {  # preflight_atualizacao <versão alvo>
-  local versao="${1:-}" veredito
+  local versao="${1:-}" veredito pacote_buildx
   versao="${versao#v}"
   if ! com_prazo 30 docker info >/dev/null 2>&1; then
     printf '%s' "o Docker não respondeu em 30s (daemon parado ou travado — veja 'systemctl status docker' e 'journalctl -u docker -n 100')."
@@ -1060,7 +1120,8 @@ preflight_atualizacao() {  # preflight_atualizacao <versão alvo>
   # sairia como "registro fora (DNS/rede)" — diagnóstico errado, e o dono iria
   # mexer na rede de uma VPS cuja rede está boa.
   if ! com_prazo 20 docker buildx version >/dev/null 2>&1; then
-    printf '%s' "o plugin buildx do Docker não está instalado nesta VPS, e é com ele que confiro se a versão $versao está publicada. Instale o pacote docker-buildx-plugin. Nada foi parado nem baixado."
+    pacote_buildx="$(pacote_do_buildx)"
+    printf '%s' "o plugin buildx do Docker não está instalado nesta VPS, e é com ele que confiro se a versão $versao está publicada. Instale o pacote $pacote_buildx. Nada foi parado nem baixado."
     return 1
   fi
   veredito="$(veredito_das_imagens_da_release "$versao")"
@@ -1095,6 +1156,42 @@ build_local_permitido() {  # build_local_permitido <versão alvo>
   [ "$(veredito_das_imagens_da_release "${1:-}")" != "indisponivel" ]
 }
 
+# Por que o portão recusou? Ecoa UM motivo, pronto para a mensagem da recusa.
+#
+# O veredito que o portão lê é 'indisponivel', e ele JUNTA causas com
+# diagnósticos OPOSTOS (#2648): sem o plugin buildx a inspeção falha nas
+# quatro imagens; registro fora, tag ainda sem imagens publicadas e sonda
+# estourada no `com_prazo 20` falham do mesmo jeito no mesmo código de saída.
+# O update.sh já separava isso no preflight (`preflight_atualizacao`); o
+# install.sh citava "o registro de imagens não respondeu" para tudo, e o dono
+# de uma VPS cuja rede está boa ia mexer na rede à toa enquanto o que faltava
+# era o plugin buildx.
+#
+# A ordem espelha o portão: primeiro a proibição explícita (que dispensa
+# sondar), depois o buildx (sem ele a sonda forçaria o veredito errado), e só
+# então o registro. O que NÃO se separa de fora — registro fora × tag sem
+# imagens × prazo estourado — é o MESMO código de saída, e o kit nunca
+# adivinha pelo TEXTO do erro: o motivo nomeia os três em vez de escolher um.
+motivo_da_recusa_do_build_local() {  # motivo_da_recusa_do_build_local <versão alvo>
+  local versao="${1:-}"
+  versao="${versao#v}"
+  case "${DESKCOMM_BUILD_LOCAL:-}" in
+    0|nao|não|no)
+      printf '%s' "$(t "a construção local foi desligada por você mesmo nesta execução (DESKCOMM_BUILD_LOCAL={1}), e o portão obedece — tire a variável ou troque o valor por 1 para construir de propósito." "${DESKCOMM_BUILD_LOCAL}")"
+      return 0 ;;
+  esac
+  # Sem buildx a inspeção falha nas QUATRO imagens e o veredito sai
+  # 'indisponivel' — o mesmo de registro fora. Conferir o plugin ANTES de
+  # atribuir a falha ao registro é o que o preflight do update.sh já fazia.
+  # O nome do pacote sai de `pacote_do_buildx` (#2754), o mesmo do preflight:
+  # `docker-buildx-plugin` não existe no apt do Ubuntu, onde o nome é `docker-buildx`.
+  if ! com_prazo 20 docker buildx version >/dev/null 2>&1; then
+    printf '%s' "$(t "o plugin buildx do Docker não está instalado nesta VPS, e é com ele que confiro se a versão {1} está publicada — sem ele a sonda falha nas quatro imagens e o veredito sai como 'registro fora', o diagnóstico errado para uma VPS cuja rede está boa. Instale o pacote {2} e rode este install.sh de novo." "$versao" "$(pacote_do_buildx)")"
+    return 0
+  fi
+  printf '%s' "$(t "o registro de imagens não respondeu para a versão {1} (DNS/rede, ou a tag ainda sem nenhuma imagem publicada — de fora os dois se parecem, e o kit não adivinha pelo texto do erro). Sem resposta do registro a construção aqui gastaria a memória desta VPS à toa, que é o defeito da #1955. Rode este install.sh de novo em alguns minutos." "$versao")"
+}
+
 # Os serviços que deveriam estar de pé depois do `up -d` (#1955, critério 6).
 # Ecoa, um por linha, os que NÃO estão rodando. Vazio = "não sei".
 #
@@ -1103,7 +1200,14 @@ build_local_permitido() {  # build_local_permitido <versão alvo>
 # se devolve a versão anterior quando há UM SERVIÇO POSITIVAMENTE fora do ar.
 servicos_fora_do_ar() {
   local esperados="app worker scheduler" saida svc estado conhecidos=0 rodando=" " fora=""
-  case "${REVERSE_PROXY:-caddy}" in traefik|npm) ;; *) esperados="$esperados caddy" ;; esac
+  # Com proxy externo (traefik/npm) não há Caddy. Com cloudflared, quem faz as
+  # vezes do proxy é o próprio contêiner do túnel: ele tem de estar de pé, senão
+  # o site fica mudo mesmo com app/worker/scheduler saudáveis.
+  case "${REVERSE_PROXY:-caddy}" in
+  traefik|npm) ;;
+  cloudflared) esperados="$esperados cloudflared" ;;
+  *)           esperados="$esperados caddy" ;;
+  esac
   # shellcheck disable=SC2046
   # Com prazo pelo mesmo motivo do healthcheck: um `ps` preso no resolver
   # saturado prenderia aqui o fim da atualização. Estourou = "não sei".
@@ -1392,6 +1496,9 @@ Rode 'docker network ls', identifique a rede do seu NPM (Settings > a que o
 contêiner dele já está conectado) e ponha PROXY_NETWORK_NAME=<nome> no .env
 antes de tentar de novo." "$rede")"
   fi
+  # cloudflared cai fora aqui de propósito: ele NÃO usa rede externa — sobe na
+  # rede interna do próprio compose e fala com o app por ela. Não há bridge a
+  # conferir nem a criar.
   [ "${REVERSE_PROXY:-caddy}" = "traefik" ] || return 0
   local nossa drv erro
   nossa="$(rede_reservada_do_proxy)"
