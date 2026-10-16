@@ -163,6 +163,38 @@ você (Tenants › empresa › card Cobrança › **Trocar plano**). As regras:
 - **Uso acima do plano novo** (pessoas ou números a mais) é recusado, com a lista do que remover.
 - A empresa só escolhe planos oferecidos a ela; o plano negociado, só você atribui.
 
+## Mandar o link de pagamento para a empresa
+
+Quando a empresa não vai entrar no sistema para assinar (o cliente pediu "me manda o Pix"), gere
+o link por ela: **Tenants** › empresa › card **Cobrança** › **Gerar link de pagamento**, e mande
+pelo WhatsApp com **Copiar link de pagamento**. O botão aparece em toda assinatura que ainda não
+está **Em dia**: no teste grátis, em atraso ou cancelada. Empresa isenta não tem o botão
+(atribua um plano antes).
+
+- **No Asaas**, a primeira vez pede o **CPF ou CNPJ de quem paga**, já preenchido com o CNPJ do
+  cadastro quando ele confere. O documento vai direto ao Asaas e não fica guardado no sistema.
+- **O cliente no provedor nasce com o e-mail do administrador mais antigo da empresa**, nunca o
+  seu nem o de outro dono da instalação, mesmo que você ainda apareça como administrador dela
+  (empresas criadas antes de 12/09). Na primeira vez, empresa sem outro administrador com e-mail
+  é recusada. São dois casos:
+  - **a empresa que você acabou de criar para outra pessoa:** até o convite ser aceito, o único
+    administrador dela é você, de forma provisória. Gere o link depois do aceite;
+  - **a empresa em que o único administrador é você mesmo:** a recusa não passa sozinha.
+    Convide um administrador da empresa em Equipe e gere o link depois que ele aceitar.
+
+  Depois que o cliente existe no provedor, o e-mail não é mais pedido e a recusa não acontece.
+- **Clicar de novo devolve o mesmo link** enquanto ele vale. Com a fatura já aberta no
+  provedor, o botão devolve o link dela, sem criar outra assinatura. No Asaas, depois do aviso
+  do provedor, a empresa vê o mesmo link em Configurações › Plano e cobrança › **Pagar agora**.
+  Na Stripe ela não vê o link: o **Assinar** dela abre a mesma sessão enquanto ela vale.
+- **Na Stripe, o link vale 24 horas.** Passou disso, gere de novo.
+- **Trocar o plano no teste grátis** expira o link aberto: gere outro depois da troca.
+- **O link gerado com a chave de teste morre ao publicar.** Gere de novo depois de trocar pela
+  chave de produção.
+- **Quem paga pela Stripe volta para a tela de login** do sistema, e não para uma página de
+  "pagamento recebido". O pagamento não depende dessa volta: a confirmação vem do aviso do
+  provedor. Avise o cliente para fechar a aba depois de pagar.
+
 ## Dar prazo, isentar e acompanhar
 
 Em **Tenants** › empresa › card **Cobrança**:

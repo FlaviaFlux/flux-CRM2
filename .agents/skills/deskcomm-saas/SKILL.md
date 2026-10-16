@@ -66,6 +66,8 @@ Pergunte, uma por vez, e pule o que já estiver claro:
 6. **Publicar:** trocar pela chave de produção em Conexão.
 7. **Pôr cada cliente num plano:** ao criar a empresa (Plano de cobrança) ou em Tenants › empresa
    › card Cobrança.
+8. **Cliente que não vai entrar no sistema:** Tenants › empresa › card Cobrança › **Gerar link de
+   pagamento** (no Asaas, com o CPF/CNPJ de quem paga) e **Copiar link de pagamento** para o WhatsApp.
 
 ## Erros que a pessoa vai cometer, e o que dizer
 
