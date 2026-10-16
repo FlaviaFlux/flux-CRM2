@@ -447,6 +447,16 @@ export const updateWebhookSourceSchema = createWebhookSourceSchema.partial().ext
   name: z.string().trim().min(1).max(120).optional(),
   is_active: z.boolean().optional(),
   authorize_ai_on_capture: z.boolean().optional(),
+  /**
+   * A opção do #2316: quando o `external_id` já existe, ATUALIZAR o card da
+   * MESMA fonte em vez de descartar o envio como reenvio.
+   *
+   * Só entra no PATCH — criar fonte com ela ligada não existe, porque o
+   * segredo que a habilita é da mesma tela e vem depois. Nasce DESLIGADA por
+   * DEFAULT na coluna (migration 0683): quem nunca mexer aqui segue exatamente
+   * como antes do #2316, sem a integração poder reescrever edição manual.
+   */
+  update_existing_lead_on_capture: z.boolean().optional(),
 });
 
 export const createAutomationRuleSchema = z

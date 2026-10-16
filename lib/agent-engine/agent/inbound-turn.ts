@@ -104,6 +104,7 @@ import {
 import { buildOpeningMessage, ritualBlocks } from "./abertura/ritual";
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { buildCompromissosBlock } from './compromissos-do-contato';
+import { buildOrigemBlock } from './abertura/origem-do-contato';
 import { agendaNoFechamento } from './abertura/agenda-no-fechamento';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import { podeExporScheduleFollowup } from '@/lib/followup/callback-policy';
@@ -1506,6 +1507,8 @@ export interface AgentTurnInput {
      * o compilador.
      */
     compromissosBlock?: string;
+    /** O anúncio que o contato clicou (vazio = não veio de anúncio). */
+    origemBlock?: string;
     /** Texto exato da mensagem que acordou este turno inbound. */
     currentInboundText?: string;
     /**
@@ -2743,11 +2746,12 @@ async function executarTurnoDoAgente(
   // de `get-lead-context.ts:193` diz o mesmo). Passar essa variável para um
   // parâmetro chamado `contactId` é correto pelo VALOR; o nome é que mente, e é
   // o que a issue #509 conserta. Não troque por um `lead_id` "mais coerente".
-  const [notesIndexBlock, compromissosBlock, noteIdRows] = await Promise.all([
+  const [notesIndexBlock, compromissosBlock, origemBlock, noteIdRows] = await Promise.all([
     preview
       ? (preview.notes ?? []).map((n) => n.headline + ': ' + n.body).join('\n')
       : buildNotesIndexBlock(pool, tenantId, leadId, deps.knobs.notesIndexMaxTokens),
     preview?.kind === 'sandbox' ? '' : buildCompromissosBlock(pool, tenantId, leadId, new Date()),
+    preview ? '' : buildOrigemBlock(pool, tenantId, leadId, new Date()),
     preview
       ? null
       : pool
@@ -4577,6 +4581,7 @@ async function executarTurnoDoAgente(
       projeta: projetaContexto,
       entregues,
       compromissosBlock,
+      origemBlock,
       ...(currentInboundText !== null ? { currentInboundText } : {}),
     });
     // Sufixos por-lead (situacionais, voláteis — depois do prefixo cacheável F2-17): corpos de
@@ -5588,6 +5593,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
         projeta,
         entregues,
         compromissosBlock,
+        origemBlock,
         currentInboundText,
       }) =>
         buildOpeningMessage(
@@ -5599,6 +5605,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
           entregues,
           compromissosBlock,
           currentInboundText,
+          origemBlock,
         ),
     });
   };

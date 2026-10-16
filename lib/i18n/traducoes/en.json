@@ -3833,8 +3833,8 @@
   "Agentes de IA podem AGIR no CRM (MCP)": "AI agents can ACT in the CRM (MCP)",
   "Tratar o token como gerente (necessário p/ criar e atribuir)": "Treat the token as a manager (required to create and assign)",
   "Tratar o token como administrador: as permissões marcadas agem com poder de administrador (junto de AGIR no CRM, cria agentes de IA e rascunhos e configura, busca e pausa a prospecção)": "Treat the token as an administrator: the checked permissions act with administrator power (together with ACT in the CRM, it creates AI agents and drafts and configures, searches and pauses prospecting)",
-  "Ler a configuração do agente de IA (exige papel de administrador)": "Read the AI agent configuration (requires administrator role)",
-  "Editar, testar, PUBLICAR, PAUSAR, DESLIGAR e ARQUIVAR o agente de IA que atende seus clientes (exige papel de administrador)": "Edit, test, PUBLISH, PAUSE, TURN OFF and ARCHIVE the AI agent that serves your customers (requires administrator role)",
+  "Ler a configuração do agente de IA e dos roteadores de IA (exige papel de administrador)": "Read the configuration of the AI agent and of the AI routers (requires administrator role)",
+  "Editar, testar, PUBLICAR, PAUSAR, DESLIGAR e ARQUIVAR o agente de IA que atende seus clientes, e criar, editar, testar e APAGAR os roteadores de IA que escolhem qual agente responde (exige papel de administrador)": "Edit, test, PUBLISH, PAUSE, TURN OFF and ARCHIVE the AI agent that serves your customers, and create, edit, test and DELETE the AI routers that choose which agent replies (requires administrator role)",
   "Ler contatos": "Read contacts",
   "Criar e editar contatos": "Create and edit contacts",
   "Ler leads": "Read leads",
@@ -9153,5 +9153,6 @@
   "A conversa abre atribuída a você: a IA não assume este atendimento.": "The conversation opens assigned to you: the AI does not take over this service.",
   "Criar conversa": "Create conversation",
   "Nenhum contato encontrado": "No contact found",
-  "A conversa abriu, mas a primeira mensagem não pôde ser enviada.": "The conversation opened, but the first message could not be sent."
+  "A conversa abriu, mas a primeira mensagem não pôde ser enviada.": "The conversation opened, but the first message could not be sent.",
+  "Formato não suportado: use ?formato=csv.": "Unsupported format: use ?formato=csv."
 }
