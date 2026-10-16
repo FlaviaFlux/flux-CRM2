@@ -1248,11 +1248,18 @@ jobs:
       # rodada porque o "Adotar" do fim do caso move o ponteiro da org), lê só o
       # banco local e não depende de WAHA, Redis, Resend nem de seed de passo.
       # É o primeiro e2e de skills do repositório. Medido: 10,3s de caso.
+      # `cobranca-link-pelo-dono` entrou em 2026-10-14 (link de pagamento pelo
+      # card Cobrança do tenant, D-15) na PARTE_6, ao lado das duas specs que
+      # dirigem o mesmo card. Semeia as próprias orgs, pessoas e plano pelo
+      # service role, sobe o dublê em 127.0.0.1:3995 (nenhuma outra spec desta
+      # parte o sobe) e devolve as chaves da instalação no `finally`.
+      # PREVISÃO, não medida: ~1,5 min de caso.
       SPECS_PARTE_6: >-
         agenda-google-meet.spec.ts
         agenda-presenca-recuperacao.spec.ts
         celular-cabe-na-tela.spec.ts
         cobranca-desligada.spec.ts
+        cobranca-link-pelo-dono.spec.ts
         cobranca-suspensao-e-limites.spec.ts
         filtro-por-marcador-pela-tela.spec.ts
         fonte-de-captacao-assina-os-envios.spec.ts
@@ -1268,6 +1275,7 @@ jobs:
         skills-versao-nova-do-catalogo.spec.ts
         sons-dos-avisos.spec.ts
         suspensao-administrativa.spec.ts
+        integracao-dados-fontes-liberadas.spec.ts
 
       # ─── FORA_DO_CI — as que ficaram fora, e o motivo de cada uma ───
       #

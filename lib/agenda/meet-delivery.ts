@@ -19,7 +19,9 @@ export class MeetingDeliveryBlockedError extends Error {
 const policySchema = z.discriminatedUnion("current", [
   z.object({ current: z.literal(false), reason: z.string() }),
   z.object({ current: z.literal(true), human_command: z.boolean(), contact_id: z.uuid(), channel_session_id: z.uuid(),
-    force_human: z.boolean().nullable(), ai_gate: z.string().nullable(),
+    // Obrigatório: payload sem a marca (banco sem a 0676) reprova o parse e o envio
+    // é recusado — nunca lido como "marca desligada".
+    force_human: z.boolean().nullable(), ai_opt_out: z.boolean(), ai_gate: z.string().nullable(),
     ai_authorized_at: z.string().nullable(), assignee_kind: z.string().nullable(), bot_silenced_until: z.string().nullable(),
   }),
 ]);
@@ -40,14 +42,10 @@ function requirePolicy(raw: unknown): { humanCommand: boolean; contactId: string
     // política chega aqui, a org ESTAVA operante na mesma leitura.
     orgStatus: STATUS_OPERANTE,
     aiGate: p.ai_gate, forceHuman: p.force_human,
-    // `ai_opt_out` (marca permanente, issue 2379) não vem no payload de
-    // `fn_meet_delivery_policy` — esta função lê o POLICY da conversa, e a
-    // coluna nova mora no CONTATO. O acoplamento que fecha a porta aqui é o
-    // próprio desenho: armar `ai_opt_out` também liga `contacts.force_human`
-    // e `devolverAtendimentoAoAgente` se recusa a limpá-lo enquanto a marca
-    // estiver ligada, então `p.force_human` já é true neste ponto. Deixar isto
-    // explícito (e não `false` mudo) é o que faz o leitor não tratar como esquecimento.
-    aiOptOut: false, assigneeKind: p.assignee_kind ?? null,
+    // `ai_opt_out` lido do contato pela própria política (migration 0676), e não
+    // deduzido de `force_human`: outro escritor que zere `force_human` não pode
+    // liberar para a IA um contato marcado "sempre atendimento humano".
+    aiOptOut: p.ai_opt_out, assigneeKind: p.assignee_kind ?? null,
     botSilencedUntil: p.bot_silenced_until, aiAuthorizedAt: p.ai_authorized_at,
     agora: new Date(), ttlMs: ttlDaAutorizacaoMs(process.env),
   }));
