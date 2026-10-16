@@ -7394,6 +7394,11 @@ export const DICIONARIO: Traducoes = {
   "O relatório de {lei} entregue ao cliente traz a {campo_alto} da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo \"{campo}\" em Configurações → Organização.": {
     es: "El informe de {lei} que se entrega al cliente incluye la {campo_alto} de tu empresa, no el nombre de arriba, porque es ella quien responde legalmente por los datos. Revisa el campo \"{campo}\" en Configuración → Organización.",
   },
+  // País sem citação revisada não cita lei nenhuma (issue #2344): o `??
+  // "LGPD"` do call site afirmava a lei brasileira a quem nem tem perfil.
+  "O relatório entregue ao cliente traz a {campo_alto} da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo \"{campo}\" em Configurações → Organização.": {
+    es: "El informe entregado al cliente muestra la {campo_alto} de tu empresa, no el nombre de arriba, porque es ella quien responde legalmente por los datos. Revisa el campo \"{campo}\" en Configuración → Organización.",
+  },
   "Use a ação \"Webhooks\" → POST, apontando para o endereço acima.": {
     es: "Usa la acción \"Webhooks\" → POST y apunta a la dirección de arriba.",
   },
@@ -8810,9 +8815,18 @@ export const DICIONARIO: Traducoes = {
   "Como esta instalação do": { es: "Cómo esta instalación de" },
   "trata dados pessoais.": { es: "trata los datos personales." },
   "1. Quem é o controlador": { es: "1. Quién es el responsable" },
+  // Vocabulário do RGPD em pt-PT para a política de uma organização de
+  // Portugal (issue #2344): "responsável pelo tratamento" (art. 4.º, n.º 7).
+  "1. Quem é o responsável pelo tratamento": { es: "1. Quién es el responsable del tratamiento" },
   "O controlador dos dados tratados aqui é": { es: "El responsable de los datos tratados aquí es" },
+  "O responsável pelo tratamento dos dados tratados aqui é": {
+    es: "El responsable del tratamiento de los datos tratados aquí es",
+  },
   "quem instalou e opera este sistema. Os autores do software não têm acesso a este servidor nem aos dados guardados nele, e não são controladores nem operadores desses dados.": {
     es: "quien instaló y opera este sistema. Los autores del software no tienen acceso a este servidor ni a los datos guardados en él, y no son responsables ni encargados de esos datos.",
+  },
+  "quem instalou e opera este sistema. Os autores do software não têm acesso a este servidor nem aos dados guardados nele, e não são responsáveis pelo tratamento nem operadores desses dados.": {
+    es: "quien instaló y opera este sistema. Los autores del software no tienen acceso a este servidor ni a los datos guardados en él, y no son responsables del tratamiento ni encargados de esos datos.",
   },
   "2. Que dados são tratados": { es: "2. Qué datos se tratan" },
   "De quem é atendido:": { es: "De quien recibe atención:" },
@@ -8857,6 +8871,9 @@ export const DICIONARIO: Traducoes = {
   "A LGPD garante a você confirmar se há tratamento, acessar seus dados, corrigir dados incompletos ou desatualizados, pedir anonimização ou eliminação, saber com quem foram compartilhados e revogar consentimento.": {
     es: "La LGPD te da derecho a confirmar si se tratan tus datos, acceder a ellos, corregir datos incompletos o desactualizados, pedir su anonimización o eliminación, saber con quién se compartieron y revocar tu consentimiento.",
   },
+  "O RGPD garante-lhe confirmar se há tratamento, aceder aos seus dados, corrigir dados incompletos ou desatualizados, pedir anonimização ou eliminação, saber com quem foram partilhados e retirar o consentimento.": {
+    es: "El RGPD le garantiza confirmar si hay tratamiento, acceder a sus datos, corregir datos incompletos o desactualizados, pedir su anonimización o eliminación, saber con quién fueron compartidos y retirar el consentimiento.",
+  },
   "O sistema atende esses pedidos por um fluxo próprio: a exportação reúne o que existe sobre a pessoa, e a anonimização remove a identificação preservando o histórico de atendimento — por isso ela": {
     es: "El sistema atiende estas solicitudes con un flujo propio: la exportación reúne lo que existe sobre la persona, y la anonimización elimina su identificación y conserva el historial de atención; por eso",
   },
@@ -8866,11 +8883,18 @@ export const DICIONARIO: Traducoes = {
     es: "El acceso se controla con cuenta, contraseña y rol. La verificación en dos pasos es opcional para todos y solo se puede exigir a quien administra. Cada organización alojada solo ve sus propios datos y las claves de integración se guardan cifradas.",
   },
   "8. Encarregado e contato": { es: "8. Encargado y contacto" },
+  "8. Encarregado da proteção de dados e contato": { es: "8. Encargado de protección de datos y contacto" },
   "Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado de dados:": {
     es: "Para ejercer tus derechos o resolver dudas sobre privacidad, habla con el encargado de datos:",
   },
+  "Para exercer seus direitos ou tirar dúvidas sobre privacidade, fale com o encarregado da proteção de dados:": {
+    es: "Para ejercer sus derechos o resolver dudas sobre privacidad, hable con el encargado de protección de datos:",
+  },
   "O operador ainda não publicou um endereço de contato do encarregado de dados nesta instalação. Os pedidos devem ser feitos pelos canais de atendimento da própria organização.": {
     es: "El operador todavía no publicó una dirección de contacto del encargado de datos en esta instalación. Las solicitudes deben hacerse por los canales de atención de la propia organización.",
+  },
+  "O operador ainda não publicou um endereço de contato do encarregado da proteção de dados nesta instalação. Os pedidos devem ser feitos pelos canais de atendimento da própria organização.": {
+    es: "El operador todavía no publicó una dirección de contacto del encargado de protección de datos en esta instalación. Las solicitudes deben hacerse por los canales de atención de la propia organización.",
   },
 
   "As regras de uso desta instalação do": { es: "Las reglas de uso de esta instalación de" },
@@ -12519,6 +12543,7 @@ export const DICIONARIO: Traducoes = {
   "Este atendimento está atribuído a uma pessoa. O responsável pode autorizar somente este link pelo botão de envio.": { es: "Esta atención está asignada a una persona. El responsable puede autorizar solo este enlace con el botón de envío." },
   "O contato não está autorizado para atendimento automático. O responsável pode autorizar somente este link pelo botão de envio.": { es: "El contacto no está autorizado para la atención automática. El responsable puede autorizar solo este enlace con el botón de envío." },
   "A autorização de atendimento automático expirou. O responsável pode autorizar somente este link pelo botão de envio.": { es: "La autorización de atención automática venció. El responsable puede autorizar solo este enlace con el botón de envío." },
+  "O contato está marcado como sempre atendimento humano. O responsável pode enviar este link pelo botão de envio, sem ativar a IA.": { es: "El contacto está marcado como siempre atención humana. El responsable puede enviar este enlace con el botón de envío, sin activar la IA." },
   "O envio atingiu uma janela ou limite do canal. Aguarde a liberação antes de tentar novamente.": { es: "El envío alcanzó una ventana o un límite del canal. Espera a que se habilite antes de intentarlo de nuevo." },
   "Uma regra de envio impediu a mensagem. Confira o aviso na Central antes de tentar novamente.": { es: "Una regla de envío bloqueó el mensaje. Revisa el aviso en la Central antes de intentarlo de nuevo." },
   "Sua reunião está marcada para": { es: "Tu reunión está programada para" },
@@ -13138,6 +13163,19 @@ export const DICIONARIO: Traducoes = {
   "registro(s).": { es: "registro(s)." },
   "registro(s) e em": { es: "registro(s) y en" },
   "regra(s) de agente.": { es: "regla(s) de agente." },
+  // ── O AVISO DE JUNÇÃO (issue #2801) ────────────────────────────────────────
+  //
+  // Renomear para um nome que já EXISTE junta as duas etiquetas numa só, e a
+  // operação respondia idêntica a um renome simples. São duas frases, e as
+  // duas são novas: o toast que substitui o de sucesso quando o banco devolve
+  // `juntou: true`, e o aviso ANTES do clique, quando o nome digitado já é uma
+  // etiqueta da organização. `destino` (o nome digitado) entra FORA do `t()`,
+  // como em toda frase montada em runtime.
+  "Etiqueta juntada em": { es: "Etiqueta unificada en" },
+  "as duas etiquetas viraram uma só.": { es: "las dos etiquetas se unificaron en una sola." },
+  "Este nome já existe no vocabulário — confirmar vai juntar as duas etiquetas numa só.": {
+    es: "Este nombre ya existe en el vocabulario: confirmar unificará las dos etiquetas en una sola.",
+  },
   // As frases de recusa do servidor. Três delas não tinham entrada: o argumento
   // de `t()` ali é uma expressão `??`, que o guarda também não resolve.
   "Confira a etiqueta e o novo nome.": { es: "Revisa la etiqueta y el nombre nuevo." },
@@ -13890,6 +13928,9 @@ export const DICIONARIO: Traducoes = {
   "Lendo o catálogo…": { es: "Leyendo el catálogo…" },
   "Não foi possível ler o catálogo.": { es: "No se pudo leer el catálogo." },
   "Este banco não tem tabelas visíveis.": { es: "Esta base no tiene tablas visibles." },
+  "Nenhuma tabela liberada ainda. Marque acima, em “O que o assistente pode ver”, as que podem ser lidas.": {
+    es: "Ninguna tabla habilitada todavía. Marca arriba, en “Qué puede ver el asistente”, las que se pueden leer.",
+  },
   "view": { es: "vista" },
   "Escolha uma tabela à esquerda para ver os dados.": {
     es: "Elige una tabla a la izquierda para ver los datos.",
@@ -13935,6 +13976,45 @@ export const DICIONARIO: Traducoes = {
   "Esta conexão está desativada. Ative-a na lista para consultar os dados.": {
     es: "Esta conexión está desactivada. Actívala en la lista para consultar los datos.",
   },
+  "O que o assistente pode ver": { es: "Qué puede ver el asistente" },
+  "Não foi possível ler a lista": { es: "No fue posible leer la lista" },
+  "Tudo liberado": { es: "Todo liberado" },
+  "Nada liberado": { es: "Nada liberado" },
+  "1 tabela liberada": { es: "1 tabla liberada" },
+  "tabelas liberadas": { es: "tablas liberadas" },
+  "Tudo liberado: o assistente enxerga tudo que o usuário do banco enxerga.": { es: "Todo liberado: el asistente ve todo lo que ve el usuario de la base de datos." },
+  "Nenhuma tabela liberada ainda. Só quem administra a organização pode escolher.": { es: "Aún no hay tablas liberadas. Solo quien administra la organización puede elegir." },
+  "Descrição para o assistente (opcional)": { es: "Descripción para el asistente (opcional)" },
+  "Ex.: pedidos dos clientes, com status e valor": { es: "Ej.: pedidos de los clientes, con estado y valor" },
+  "Esta tabela não tem a coluna que identifica o cliente:": { es: "Esta tabla no tiene la columna que identifica al cliente:" },
+  "Nas conversas, o assistente não consegue consultá-la.": { es: "En las conversaciones, el asistente no puede consultarla." },
+  "Colunas que o assistente pode ler": { es: "Columnas que el asistente puede leer" },
+  "Só as colunas marcadas (recomendado)": { es: "Solo las columnas marcadas (recomendado)" },
+  "Todas, inclusive as que forem criadas depois": { es: "Todas, incluso las que se creen después" },
+  "Uma coluna nova (por exemplo, uma senha) passaria a ser lida sem ninguém marcar.": { es: "Una columna nueva (por ejemplo, una contraseña) se leería sin que nadie la marque." },
+  "Coluna que identifica o cliente: precisa ficar liberada": { es: "Columna que identifica al cliente: debe quedar liberada" },
+  "Lendo a lista…": { es: "Leyendo la lista…" },
+  "Só quem administra a organização altera esta lista.": { es: "Solo quien administra la organización modifica esta lista." },
+  "Marque as tabelas que o assistente pode consultar neste banco. O que não estiver marcado, ele não enxerga.": { es: "Marca las tablas que el asistente puede consultar en esta base de datos. Lo que no esté marcado, no lo ve." },
+  "Só o que eu marcar (recomendado)": { es: "Solo lo que yo marque (recomendado)" },
+  "Tudo que o usuário do banco enxerga": { es: "Todo lo que ve el usuario de la base de datos" },
+  "O assistente enxerga todas as tabelas que o usuário do banco enxerga.": { es: "El asistente ve todas las tablas que ve el usuario de la base de datos." },
+  "Se houver dados sensíveis (senhas, chaves), crie no banco um usuário de leitura só com o que ele precisa, ou volte para \"Só o que eu marcar\".": { es: "Si hay datos sensibles (contraseñas, claves), crea en la base de datos un usuario de lectura solo con lo que necesita, o vuelve a \"Solo lo que yo marque\"." },
+  "Falta escolher o que o assistente pode ler. Até lá, ele não enxerga nada deste banco.": { es: "Falta elegir qué puede leer el asistente. Hasta entonces, no ve nada de esta base de datos." },
+  "Buscar tabela ou view": { es: "Buscar tabla o vista" },
+  "Só views": { es: "Solo vistas" },
+  "Algumas tabelas não foram marcadas (limite de 200 fontes, ou tabela sem colunas).": { es: "Algunas tablas no se marcaron (límite de 200 fuentes, o tabla sin columnas)." },
+  "Marcar todas as visíveis": { es: "Marcar todas las visibles" },
+  "Desmarcar as visíveis": { es: "Desmarcar las visibles" },
+  "liberadas": { es: "liberadas" },
+  "Não foi possível ler o catálogo do banco agora. Confira a conexão e tente de novo.": { es: "No fue posible leer el catálogo de la base de datos ahora. Revisa la conexión e inténtalo de nuevo." },
+  "Marcadas, mas não encontradas no banco": { es: "Marcadas, pero no encontradas en la base de datos" },
+  "não encontrada no banco": { es: "no encontrada en la base de datos" },
+  "Remover da lista": { es: "Quitar de la lista" },
+  "Lista salva. O assistente já usa a nova lista.": { es: "Lista guardada. El asistente ya usa la nueva lista." },
+  "O assistente ainda não enxerga nada deste banco.": { es: "El asistente aún no ve nada de esta base de datos." },
+  "Escolher o que ele pode ler": { es: "Elegir qué puede leer" },
+  "Conexão criada. Agora escolha o que o assistente pode ler.": { es: "Conexión creada. Ahora elige qué puede leer el asistente." },
   // Frase inteira, e não "Ativada" seco: essa chave já existe neste arquivo,
   // de outra tela e no feminino (`Activada`) — reusá-la duplicaria a chave e
   // discordaria do gênero de `Recorrido`.
@@ -15350,6 +15430,22 @@ export const DICIONARIO: Traducoes = {
   "Em atraso desde": { es: "Atrasada desde" },
   "Copiar link de pagamento": { es: "Copiar enlace de pago" },
   "Link copiado. Mande para a empresa pelo WhatsApp.": { es: "Enlace copiado. Envíalo a la empresa por WhatsApp." },
+  // ─── cobrança: link de pagamento gerado pelo dono no painel da empresa (D-15); as 4 últimas são frases da rota ───
+  "Gerar link de pagamento": { es: "Generar enlace de pago" },
+  "Link de pagamento": { es: "Enlace de pago" },
+  "Mande para a empresa. Se o link expirar, gere de novo.": { es: "Envíalo a la empresa. Si el enlace vence, genera uno nuevo." },
+  "Vai direto para o Asaas, que emite a cobrança neste documento; não fica guardado neste sistema.": { es: "Va directo a Asaas, que emite el cobro con este documento; no queda guardado en este sistema." },
+  "Esta empresa é isenta: atribua um plano antes de gerar o link.": { es: "Esta empresa está exenta: asígnale un plan antes de generar el enlace." },
+  "Conecte o provedor de pagamento em Cobrança › Conexão antes de gerar o link.": { es: "Conecta el proveedor de pago en Cobro › Conexión antes de generar el enlace." },
+  "A empresa já tem assinatura, mas não há cobrança aberta agora. Ela precisa atualizar o cartão em Plano e cobrança.": { es: "La empresa ya tiene suscripción, pero no hay ningún cobro abierto ahora. Debe actualizar la tarjeta en Plan y facturación." },
+  "A empresa ainda não tem administrador com e-mail. Gere o link depois que um convite de administrador for aceito.": { es: "La empresa aún no tiene un administrador con correo electrónico. Genera el enlace después de que se acepte una invitación de administrador." },
+  "O provedor de pagamento recusou o pedido. Confira a chave em Cobrança › Conexão e tente de novo; o motivo aparece no painel do provedor.": { es: "El proveedor de pago rechazó la solicitud. Revisa la clave en Cobro › Conexión e inténtalo de nuevo; el motivo aparece en el panel del proveedor." },
+  "Não foi possível ler os administradores da empresa.": { es: "No se pudieron leer los administradores de la empresa." },
+  // ─── cobrança: frases do núcleo do checkout (`lib/cobranca/checkout.ts`), comuns ao "Assinar" e ao link do dono ───
+  "Não foi possível ler a assinatura.": { es: "No se pudo leer la suscripción." },
+  "Não foi possível reservar o pagamento.": { es: "No se pudo reservar el pago." },
+  "Não foi possível gerar o link de pagamento. Tente de novo em instantes.": { es: "No se pudo generar el enlace de pago. Inténtalo de nuevo en unos instantes." },
+  "Informe o CPF ou CNPJ de quem paga: o provedor de pagamento exige para emitir a cobrança.": { es: "Indica el CPF o CNPJ de quien paga: el proveedor de pago lo exige para emitir el cobro." },
   "A Stripe só avisa pagamentos num endereço https público (ex.: https://crm.example.com). Configure o domínio do sistema com HTTPS e volte aqui.": { es: "Stripe solo avisa pagos en una dirección https pública (ej.: https://crm.example.com). Configura el dominio del sistema con HTTPS y vuelve aquí." },
   "Modo de teste: suas empresas reais ainda não conseguem pagar. Quando a compra de teste der certo, troque para a chave de produção em Conexão.": { es: "Modo de prueba: tus empresas reales todavía no pueden pagar. Cuando la compra de prueba funcione, cambia a la clave de producción en Conexión." },
   "{n} aviso de pagamento recusado nas últimas 24 h: a assinatura não confere. Conecte a chave de novo na aba Conexão.": { es: "{n} aviso de pago rechazado en las últimas 24 h: la firma no coincide. Conecta la clave de nuevo en la pestaña Conexión." },
@@ -15581,8 +15677,10 @@ export const DICIONARIO: Traducoes = {
   // O cartão de Configurações › Empresa, só fora do Brasil. Os rótulos trazem
   // a letra porque é assim que o relatório de acesso os imprime ("a) Finalidades:").
   "Alíneas do art. 15.º do RGPD": { es: "Alíneas del art. 15.º del RGPD" },
-  "O relatório de acesso imprime estes três textos em nome da organização. Deixar em branco faz o documento mostrar «não informado pelo controlador» — nada é inventado no lugar do que falta.": {
-    es: "El informe de acceso imprime estos tres textos en nombre de la organización. Dejarlos en blanco hace que el documento muestre «no informado por el responsable»: no se inventa nada en lugar de lo que falta.",
+  // `{naoInformado}` é a frase LITERAL que o PDF imprime (em português, no
+  // vocabulário do país da organização) — por isso não se traduz.
+  "O relatório de acesso imprime estes três textos em nome da organização. Deixar em branco faz o documento mostrar «{naoInformado}» — nada é inventado no lugar do que falta.": {
+    es: "El informe de acceso imprime estos tres textos en nombre de la organización. Dejarlos en blanco hace que el documento muestre «{naoInformado}»: no se inventa nada en lugar de lo que falta.",
   },
   "Finalidades do tratamento (alínea a))": {
     es: "Finalidades del tratamiento (letra a))",
