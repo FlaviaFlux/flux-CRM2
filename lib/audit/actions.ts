@@ -270,10 +270,11 @@ export const AUDIT_ACTIONS = [
   // Rótulo interno do canal (channel_sessions.display_name); nada vai ao
   // provedor. Emitida por app/api/v1/channel-sessions/[id]/name.
   "channel.renamed",
-  // A janela de manutenção (#2388): criar e cancelar são mutações da tela e
-  // auditam como toda mutação. A pausa e a retomada que a janela aplica saem
-  // como `channel.disabled`/`channel.enabled`, com `origem: schedule`.
+  // A janela de manutenção (#2388): criar, editar e cancelar são mutações da
+  // tela e auditam como toda mutação. A pausa e a retomada que a janela aplica
+  // saem como `channel.disabled`/`channel.enabled`, com `origem: schedule`.
   "channel.schedule_created",
+  "channel.schedule_updated",
   "channel.schedule_cancelled",
   // Chamada de voz WhatsApp (WaCalls, spec 18) — pareamento do segundo
   // dispositivo vinculado, opt-in por org. Admin only.
@@ -1116,6 +1117,11 @@ export const AUDIT_ACTIONS = [
   // Planos de tarefa (#1752): a lista `settings.task_plans` mudou pela rota
   // `settings/task-plans` — mesma família de `campaign.settings_updated`.
   "task_plans.settings_updated",
+
+  // Fontes liberadas do banco externo (Spec 23): o administrador trocou o modo
+  // (`all`/`list`) e a lista do que o assistente pode ler. O metadata carrega só
+  // CONTAGENS (modo e número de fontes), nunca nomes de tabela ou de coluna.
+  "external_db_sources.updated",
 
   // Gestão de tenants pelo admin da plataforma (migration 0614).
   // A LÁPIDE, gravada pelo banco dentro de `fn_excluir_organizacao`, com

@@ -375,19 +375,34 @@ v_sb_key() {
     *) echo "$(t "Isso não parece uma chave do Supabase (elas começam com 'eyJ' ou 'sb_'). Pegue em Settings > API.")"; return 1;;
   esac
   [ -z "$url" ] && return 0
+  # ── A PROVA HTTP bate no Supabase LOCAL quando ele é desta VPS ──────────────
+  # No single-server a URL pública é servida pelo Caddy desta instalação, e ele
+  # só sobe DEPOIS desta fase: com o domínio atrás de proxy (Cloudflare laranja,
+  # o padrão do kit) a chamada abaixo volta 521 e a instalação PARA na fase 2,
+  # mandando conferir uma chave que está certa — medido numa VPS real, 10/10/2026.
+  # Quem responde à pergunta "esta chave serve?" é o gateway local, publicado só
+  # em loopback — a MESMA escolha que `v_supabase_url` já faz acima. O `ref` do
+  # JWT continua conferido contra a URL que o operador deu: aquela comparação é
+  # sobre o PROJETO, e essa não muda.
+  local prova="$url"
+  if [ "${SINGLE_SERVER:-0}" = "1" ]; then
+    case "${SUPABASE_INTERNAL_URL:-}" in
+      http://*|https://*) prova="$SUPABASE_INTERNAL_URL";;
+    esac
+  fi
   local code
   if [ "$want" = "service_role" ]; then
     # Rota de administração: a anon leva 401 aqui. É o que separa uma da outra.
     code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 \
       -H "apikey: $key" -H "Authorization: Bearer $key" \
-      "$url/auth/v1/admin/users?page=1&per_page=1" 2>/dev/null)" || code=000
+      "$prova/auth/v1/admin/users?page=1&per_page=1" 2>/dev/null)" || code=000
   else
     # /auth/v1/settings é a rota que a anon PODE abrir. Não use /rest/v1/: ele
     # responde 401 "Only the service_role API key can be used for this endpoint"
     # até para a anon correta — validador que reprova o dado certo é pior que
     # nenhum. Provado nesta VPS: settings dá 200 para as chaves do projeto e 401
     # para lixo e para JWT de outro projeto.
-    code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 -H "apikey: $key" "$url/auth/v1/settings" 2>/dev/null)" || code=000
+    code="$(curl -s -o /dev/null -w '%{http_code}' -m 20 -H "apikey: $key" "$prova/auth/v1/settings" 2>/dev/null)" || code=000
   fi
   case "$code" in
     2*) return 0;;
@@ -1032,6 +1047,25 @@ if [ -f "$PARTIAL_FILE" ]; then
   c_dim "$(t "  (o token do Supabase é de conta e nunca entra no rascunho: ele é perguntado de novo. Enter pula)")"
 fi
 
+# ARM64: resolver uma release publicada e conferir as quatro imagens e a WAHA
+# efetiva no índice OCI ANTES de criar projeto Supabase, rede, .env ou schema.
+# Uma tag Git pode existir antes do CI. Em AMD64 a versão segue a cascata de
+# sempre (mais abaixo): a sonda exige `docker buildx`, e toda imagem publicada
+# já tem amd64.
+PLATAFORMA_HOST="$(plataforma_oci_do_host "$(uname -m 2>/dev/null || true)" 2>/dev/null || true)"
+if [ "$PLATAFORMA_HOST" = linux/arm64 ]; then
+  RELEASE_TAG="$(ultima_release_estavel)"
+  VERSAO_ALVO="${RELEASE_TAG#v}"
+  WAHA_EFETIVA="${WAHA_IMAGE:-$(imagem_waha_padrao_para_host)}"
+  if [ -z "$RELEASE_TAG" ] || ! preflight_instalacao "$VERSAO_ALVO" "$PLATAFORMA_HOST" "$WAHA_EFETIVA"; then
+    c_red "$(t "✖ Não há release numérica completa para ARM64, ou a WAHA escolhida não oferece ARM64.")"
+    c_red "$(t "  Confira registry, visibilidade das quatro imagens e WAHA_IMAGE; depois repita.")"
+    # O painel genérico sugeriria down -v/drop schema antes de qualquer efeito.
+    trap - EXIT
+    exit 1
+  fi
+fi
+
 # ── Proxy reverso: quem está com as portas 80 e 443? ────────────────────────
 # Fica AQUI, logo depois de ler o .env e ANTES de qualquer coisa cara: era a
 # última etapa da fase 2, então quem esbarrava neste problema já tinha criado um
@@ -1368,7 +1402,8 @@ fi
 # que a versão não era nomeável.
 #
 # Resolvido no REMOTO porque o clone é `--depth 1` e não traz tag nenhuma.
-VERSAO_ALVO="$(ultima_versao_publicada "$REPO_URL")"
+# Em ARM64 a versão já foi resolvida e conferida pelo pré-voo, lá em cima.
+[ "$PLATAFORMA_HOST" = linux/arm64 ] || VERSAO_ALVO="$(ultima_versao_publicada "$REPO_URL")"
 
 # A tag do git é condição NECESSÁRIA, não suficiente: ela nasce minutos antes
 # das imagens, e `deskcomm-worker`/`deskcomm-scheduler` só passaram a existir
@@ -1380,7 +1415,9 @@ VERSAO_ALVO="$(ultima_versao_publicada "$REPO_URL")"
 # Cascata, do mais específico ao mais disponível. Cada nível pergunta pelas TRÊS
 # imagens juntas, porque instalar com elas desalinhadas é o defeito, não a
 # solução.
-if [ -n "$VERSAO_ALVO" ] && trio_publicado "$VERSAO_ALVO"; then
+if [ "$PLATAFORMA_HOST" = linux/arm64 ]; then
+  : # pré-voo OCI já passou
+elif [ -n "$VERSAO_ALVO" ] && trio_publicado "$VERSAO_ALVO"; then
   : # o caminho normal: as três publicadas na última versão
 elif trio_publicado "stable"; then
   c_ylw "$(t "⚠ A versão {1} ainda não tem as três imagens publicadas." "${VERSAO_ALVO:-$(t "mais recente")}")"
