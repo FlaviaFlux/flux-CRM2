@@ -222,7 +222,7 @@ export function ConversationList({
               title={t("Selecionar todas")}
               data-testid="selecionar-todas-visiveis"
               onClick={onSelecionarTodosVisiveis}
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-input bg-background transition-colors hover:bg-surface-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-muted-foreground bg-background transition-colors hover:bg-surface-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
             >
               {selecionados && items.every((c) => selecionados.has(c.id)) && (
                 <Check size={12} weight="bold" aria-hidden />

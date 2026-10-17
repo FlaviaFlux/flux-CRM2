@@ -1057,6 +1057,8 @@ export type Database = {
         Row: {
           channel_session_id: string
           created_at: string
+          default_assignee_user_id: string | null
+          distribution_mode: string | null
           id: string
           organization_id: string
           updated_at: string
@@ -1064,6 +1066,8 @@ export type Database = {
         Insert: {
           channel_session_id: string
           created_at?: string
+          default_assignee_user_id?: string | null
+          distribution_mode?: string | null
           id?: string
           organization_id: string
           updated_at?: string
@@ -1071,6 +1075,8 @@ export type Database = {
         Update: {
           channel_session_id?: string
           created_at?: string
+          default_assignee_user_id?: string | null
+          distribution_mode?: string | null
           id?: string
           organization_id?: string
           updated_at?: string
@@ -10728,6 +10734,15 @@ export type Database = {
       }
       fn_can_view_conversation: {
         Args: { p_assigned_to_user_id: string; p_org: string }
+        Returns: boolean
+      }
+      fn_evento_visivel_ao_atendente: {
+        Args: {
+          p_entity_id: string
+          p_entity_kind: string
+          p_org: string
+          p_payload: Json
+        }
         Returns: boolean
       }
       fn_can_view_lead: {
