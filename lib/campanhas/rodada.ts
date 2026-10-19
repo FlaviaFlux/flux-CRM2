@@ -45,8 +45,16 @@ import { logger } from "@/lib/logger";
 import { OrgNaoOperanteError, STATUS_OPERANTE, ehOperante, statusDaOrgEmbutida } from "@/lib/organizacao/operante";
 
 import { motivoParaExcluir, recusouMarketing, statusDaSaida } from "./elegibilidade";
+import {
+  COLUNAS_DO_CONTEUDO,
+  conteudoDoEnvio,
+  parametrosGuardados,
+  tipoDaCampanha,
+  type ConteudoDaCampanha,
+} from "./envio-da-campanha";
+import { codigoDaFalha } from "./erros-da-meta";
 import { hashDoEndereco } from "./exclusoes";
-import { renderizar } from "./renderizador";
+import { foraDaJanela } from "./janela-da-campanha";
 import { escolherNumero, poolDaCampanha, type NumeroDisponivel } from "./rodizio";
 import { podeMandarAgora, proximaTentativa, type RitmoDaCampanha } from "./ritmo";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -78,7 +86,7 @@ const NUMEROS_POR_RODADA = 10;
 /** Teto de agendadas promovidas por rodada: a sobra vira `running` no minuto seguinte. */
 const PROMOVIDAS_POR_RODADA = 100;
 
-interface CampanhaRow {
+interface CampanhaRow extends ConteudoDaCampanha {
   id: string;
   organization_id: string;
   /** O número PRINCIPAL. O pool efetivo inclui os vinculados (migration 0377). */
@@ -95,7 +103,8 @@ interface CampanhaRow {
 
 const COLUNAS_DA_CAMPANHA =
   "id, organization_id, channel_session_id, name, message_body, content_version, " +
-  "intervalo_segundos, janela_inicio_hora, janela_fim_hora, teto_diario, teto_horario";
+  "intervalo_segundos, janela_inicio_hora, janela_fim_hora, teto_diario, teto_horario, " +
+  COLUNAS_DO_CONTEUDO;
 
 /**
  * O status da organização embutido com `!inner` no `select`, e filtrado na
@@ -223,6 +232,8 @@ interface DestinatarioRow {
   contact_id: string;
   recipient_address: string | null;
   rendered_body: string | null;
+  /** O snapshot: `nome` e, na campanha de modelo, `template_values` (ver `preparacao.ts`). */
+  variables: unknown;
   contacts: {
     id: string;
     name: string | null;
@@ -243,7 +254,7 @@ async function rodarUmaCampanha(
   const { data: fila } = await admin
     .from("campaign_recipients")
     .select(
-      "id, contact_id, recipient_address, rendered_body, " +
+      "id, contact_id, recipient_address, rendered_body, variables, " +
         "contacts(id, name, display_name, phone_number, is_blocked, is_personal, is_anonymized, consent)",
     )
     .eq("campaign_id", campanha.id)
@@ -371,6 +382,7 @@ async function rodarUmaCampanha(
   // ─── O RODÍZIO: qual número fala com esta pessoa ───
   const disponiveis: NumeroDisponivel[] = [];
   const knobsPorNumero = new Map<string, Awaited<ReturnType<typeof loadChannelKnobs>>>();
+  const providerPorNumero = new Map<string, string | null>();
   for (const sessionId of numeros) {
     const k =
       sessionId === campanha.channel_session_id
@@ -380,11 +392,16 @@ async function rodarUmaCampanha(
 
     const { data: canal } = await admin
       .from("channel_sessions")
-      .select("daily_message_limit, status")
+      .select("daily_message_limit, status, provider")
       .eq("organization_id", campanha.organization_id)
       .eq("id", sessionId)
       .maybeSingle();
-    const linha = canal as { daily_message_limit: number | null; status: string } | null;
+    const linha = canal as {
+      daily_message_limit: number | null;
+      status: string;
+      provider: string | null;
+    } | null;
+    if (linha) providerPorNumero.set(sessionId, linha.provider);
     // Número fora do ar não entra no rodízio: mandar por ele seria fabricar uma
     // mensagem presa em `sending` que o recovery depois marca como falha.
     if (!linha || linha.status !== "WORKING") continue;
@@ -420,6 +437,51 @@ async function rodarUmaCampanha(
   const sessionEscolhida = escolha.sessionId;
   const knobs = knobsPorNumero.get(sessionEscolhida)!.knobs;
 
+  // ─── A janela de 24h, revalidada no número que vai falar ───
+  // Campanha de TEXTO por número oficial: a pessoa estava dentro da janela na
+  // preparação, mas a janela fecha sozinha com o tempo — e o texto livre fora
+  // dela é recusado pela Meta (131047). Sai da fila como `janela_fechada`, sem
+  // gastar a vez do número. Campanha de modelo nunca para aqui.
+  const tipo = tipoDaCampanha(campanha);
+  if (tipo === "text") {
+    const provider = providerPorNumero.get(sessionEscolhida) ?? null;
+    const ultimaEntrada = await ultimaEntradaNoNumero(admin, campanha, alvo.contact_id, sessionEscolhida);
+    if (foraDaJanela({ tipo, provider, ultimaEntrada, agora })) {
+      await admin
+        .from("campaign_recipients")
+        .update({ status: "skipped", eligibility_status: "excluded", exclusion_reason: "janela_fechada" })
+        .eq("id", alvo.id)
+        .eq("status", "pending");
+      return { enviadas: 0, pulados: 1, concluidas: 0, detalhe: "pulado:janela_fechada" };
+    }
+  }
+
+  // O conteúdo é montado DEPOIS do ritmo: a saudação ("bom dia" × "boa tarde")
+  // tem de ser a do instante em que a mensagem SAI, no fuso do canal. Montá-la
+  // na preparação produziria "bom dia" numa mensagem enviada à tarde — foi o
+  // defeito do primeiro piloto. No modelo, os parâmetros vêm congelados do
+  // snapshot e só a saudação é resolvida aqui.
+  const congelado = alvo.rendered_body ?? campanha.message_body ?? "";
+  const valoresCongelados = parametrosGuardados(
+    (alvo.variables as { template_values?: unknown } | null)?.template_values,
+  );
+  const envio = conteudoDoEnvio(campanha, {
+    corpoCongelado: congelado,
+    valoresCongelados: Object.keys(valoresCongelados).length > 0 ? valoresCongelados : null,
+    valores: { nome: nomeDoContato(contato) },
+    quando: { agora, fuso: knobs.timezone },
+  });
+  if (tipo === "template" && envio.faltando.length > 0) {
+    // Parâmetro vazio é recusado pela Meta; melhor a pessoa sair da fila com o
+    // motivo do que gastar o envio numa recusa certa.
+    await admin
+      .from("campaign_recipients")
+      .update({ status: "skipped", eligibility_status: "excluded", exclusion_reason: "variavel_ausente" })
+      .eq("id", alvo.id)
+      .eq("status", "pending");
+    return { enviadas: 0, pulados: 1, concluidas: 0, detalhe: "pulado:variavel_ausente" };
+  }
+
   // ─── O envio ───
   // O id da mensagem nasce AQUI, e não do insert: com ele, o destinatário já
   // aponta para a mensagem antes de ela existir, e o trigger de ack sempre
@@ -435,17 +497,6 @@ async function rodarUmaCampanha(
       detalhe: reserva.erro ? `erro_na_reserva:${reserva.erro.slice(0, 40)}` : "ja_reservado",
     };
   }
-
-  // O corpo é montado DEPOIS do ritmo: a saudação ("bom dia" × "boa tarde") tem
-  // de ser a do instante em que a mensagem SAI, no fuso do canal. Montá-la na
-  // preparação produziria "bom dia" numa mensagem enviada à tarde — foi o
-  // defeito do primeiro piloto.
-  const congelado = alvo.rendered_body ?? campanha.message_body ?? "";
-  const corpo = renderizar(
-    congelado,
-    { nome: nomeDoContato(contato) },
-    { agora, fuso: knobs.timezone },
-  ).texto;
 
   try {
     const boundary = await beginServiceAtOrigin(
@@ -471,8 +522,7 @@ async function rodarUmaCampanha(
       } as Parameters<typeof sendMessageHandler>[1],
       {
         conversation_id: boundary.conversation_id,
-        type: "text",
-        body: corpo,
+        ...envio.conteudo,
         metadata: {
           source: "campaign",
           campaign_id: campanha.id,
@@ -488,6 +538,9 @@ async function rodarUmaCampanha(
     // handler marca `failed` e devolve normalmente.
     const status = (mensagem as { status?: string }).status;
     const falhou = status === "failed";
+    // O motivo de verdade: o código da Meta (`meta_131026: ...` → `131026`) ou
+    // o do pré-voo do modelo. A lista "Falharam" o traduz em frase.
+    const erroDoCanal = (mensagem as { error_message?: string | null }).error_message ?? null;
     // `.eq("status","sending")` porque o ack pode ter chegado ANTES desta linha:
     // o trigger já teria avançado o destinatário para `sent`/`delivered`, e
     // escrever por cima o rebaixaria.
@@ -496,7 +549,8 @@ async function rodarUmaCampanha(
       .update({
         status: falhou ? "failed" : "sent",
         sent_at: falhou ? null : agora.toISOString(),
-        last_error_code: falhou ? "send_failed" : null,
+        last_error_code: falhou ? codigoDaFalha(erroDoCanal) : null,
+        last_error_detail: falhou ? (erroDoCanal ?? "").slice(0, 300) || null : null,
         // O `message_id` só pode ser gravado AQUI: a coluna tem FK para
         // `messages`, e a linha da mensagem só existe depois do envio. Gravá-lo
         // antes — que era o desenho original, para o trigger de ack sempre achar
@@ -601,6 +655,10 @@ export async function reservarDestinatario(
  * parar de enviar por causa dela seria o remédio pior que a doença.
  */
 async function numerosDaCampanha(admin: SupabaseClient, campanha: CampanhaRow): Promise<string[]> {
+  // Modelo aprovado é da conta (WABA) do número principal: outro número do
+  // rodízio pode não ter o mesmo modelo, e a Meta recusaria. Campanha de modelo
+  // fala só pelo principal — a API já recusa rodízio nela; isto segura linha antiga.
+  if (tipoDaCampanha(campanha) === "template") return [campanha.channel_session_id];
   const { data, error } = await admin
     .from("campaign_channel_sessions")
     .select("channel_session_id")
@@ -617,6 +675,30 @@ async function numerosDaCampanha(admin: SupabaseClient, campanha: CampanhaRow): 
     campanha.channel_session_id,
     (data ?? []).map((l) => (l as { channel_session_id: string }).channel_session_id),
   );
+}
+
+/**
+ * A última mensagem que esta pessoa mandou para ESTE número (`null` = nunca).
+ * A janela de 24h é por número: ter escrito para outro número da empresa não
+ * abre a janela deste.
+ */
+async function ultimaEntradaNoNumero(
+  admin: SupabaseClient,
+  campanha: CampanhaRow,
+  contactId: string,
+  sessionId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("conversations")
+    .select("last_inbound_at")
+    .eq("organization_id", campanha.organization_id)
+    .eq("contact_id", contactId)
+    .eq("channel_session_id", sessionId)
+    .not("last_inbound_at", "is", null)
+    .order("last_inbound_at", { ascending: false })
+    .limit(1);
+  const linha = (data ?? [])[0] as { last_inbound_at: string } | undefined;
+  return linha?.last_inbound_at ?? null;
 }
 
 /**

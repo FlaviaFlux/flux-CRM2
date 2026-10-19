@@ -41,8 +41,26 @@ import {
   contarExclusoes,
   type CandidatoDaAudiencia,
 } from "./elegibilidade";
-import { renderizar } from "./renderizador";
-import type { MotivoDeExclusao } from "./tipos";
+import { campanhaDependeDaJanela, foraDaJanela } from "./janela-da-campanha";
+import { resolverParametrosDoModelo } from "./modelo-da-campanha";
+import { renderizar, type ValoresDoDestinatario } from "./renderizador";
+import type { MotivoDeExclusao, TipoDeMensagem } from "./tipos";
+
+/**
+ * O que a campanha manda, do ponto de vista de quem prepara a lista.
+ *
+ * `corpo` é o texto livre ou, na campanha de modelo, o texto do modelo com as
+ * variáveis da campanha no lugar de cada `{{n}}` (`corpoDoModelo`). Os
+ * `parametros` só existem no modelo — inclusive os que não aparecem no corpo
+ * (sufixo de link de botão), que também tiram da lista quem não tem o dado.
+ */
+export interface MensagemDaCampanha {
+  tipo: TipoDeMensagem;
+  corpo: string;
+  parametros: Record<string, string>;
+  /** O número PRINCIPAL — é contra a janela dele que a lista de texto é conferida. */
+  channelSessionId: string | null;
+}
 
 export interface ResumoDoSnapshot {
   total: number;
@@ -65,7 +83,7 @@ export async function preverAudiencia(
   entrada: {
     organizationId: string;
     filtro: FiltroDeAudiencia;
-    corpo: string;
+    mensagem: MensagemDaCampanha;
     agora: Date;
     /** Campanha a ignorar na conta de "já em campanha" (a que está sendo editada). */
     campanhaId?: string;
@@ -96,16 +114,19 @@ async function classificar(
   entrada: {
     organizationId: string;
     filtro: FiltroDeAudiencia;
-    corpo: string;
+    mensagem: MensagemDaCampanha;
     agora: Date;
     campanhaId?: string;
   },
 ): Promise<{ linhas: ReturnType<typeof classificarAudiencia>; truncado: boolean }> {
+  const { mensagem } = entrada;
   const { candidatos, truncado } = await buscarCandidatos(admin, {
     organizationId: entrada.organizationId,
     filtro: entrada.filtro,
     agora: entrada.agora,
-    corpo: entrada.corpo,
+    // Os campos personalizados são lidos quando o TEXTO os usa — e no modelo o
+    // texto inclui os parâmetros que não aparecem no corpo (link de botão).
+    corpo: [mensagem.corpo, ...Object.values(mensagem.parametros)].join("\n"),
   });
   const jaEmCampanha = await contatosJaEmCampanha(
     admin,
@@ -113,21 +134,112 @@ async function classificar(
     entrada.campanhaId,
   );
   const suprimidos = await hashesExcluidos(admin, entrada.organizationId);
+  const janelaFechada = await vetoDaJanela(admin, {
+    organizationId: entrada.organizationId,
+    channelSessionId: mensagem.channelSessionId,
+    tipo: mensagem.tipo,
+    agora: entrada.agora,
+  });
   return {
     linhas: classificarAudiencia(candidatos, {
       excluidosAMao: new Set(entrada.filtro.excluir_contatos),
       jaEmCampanha,
       suprimidos,
       hashDoEndereco,
+      ...(janelaFechada ? { janelaFechada } : {}),
       // A saudação NÃO é resolvida aqui: ela é da hora do envio. O token fica no
       // corpo congelado e o despacho o troca — ver `rodada.ts`.
       renderizar: (c: CandidatoDaAudiencia) => {
-        const r = renderizar(entrada.corpo, { nome: c.nome, lead: c.lead, contato: c.contato });
-        return { texto: r.texto, faltando: r.faltando };
+        const valores = valoresDoCandidato(c);
+        const r = renderizar(mensagem.corpo, valores);
+        if (mensagem.tipo !== "template") return { texto: r.texto, faltando: r.faltando };
+        // Modelo: falta em QUALQUER parâmetro tira a pessoa da lista — a Meta
+        // recusa parâmetro vazio, e "Olá , tudo bem?" seria pior que não mandar.
+        const p = resolverParametrosDoModelo(mensagem.parametros, valores);
+        return { texto: r.texto, faltando: [...new Set([...r.faltando, ...p.faltando])] };
       },
     }),
     truncado,
   };
+}
+
+function valoresDoCandidato(c: CandidatoDaAudiencia): ValoresDoDestinatario {
+  return { nome: c.nome, lead: c.lead, contato: c.contato };
+}
+
+/** Linhas lidas por página na consulta da janela. */
+const PAGINA_DA_JANELA = 1000;
+
+/**
+ * O veto da janela para ESTA campanha, ou `undefined` quando ela não depende de
+ * janela (campanha de modelo, número QR, número que não se achou).
+ *
+ * Lê só as conversas do número com entrada nas últimas 24h — quem não aparece
+ * nelas está fora da janela. É a lista pequena (quem escreveu ontem), nunca a
+ * lista inteira da campanha numa `in (...)` de URL.
+ */
+async function vetoDaJanela(
+  admin: SupabaseClient,
+  entrada: {
+    organizationId: string;
+    channelSessionId: string | null;
+    tipo: TipoDeMensagem;
+    agora: Date;
+  },
+): Promise<((c: CandidatoDaAudiencia) => boolean) | undefined> {
+  if (!entrada.channelSessionId || entrada.tipo === "template") return undefined;
+  const { data: sessao } = await admin
+    .from("channel_sessions")
+    .select("provider")
+    .eq("organization_id", entrada.organizationId)
+    .eq("id", entrada.channelSessionId)
+    .maybeSingle();
+  const provider = (sessao as { provider?: string | null } | null)?.provider ?? null;
+  if (!campanhaDependeDaJanela(entrada.tipo, provider)) return undefined;
+
+  const desde = new Date(entrada.agora.getTime() - 24 * 3_600_000).toISOString();
+  const ultimaEntrada = new Map<string, string>();
+  for (let de = 0; ; de += PAGINA_DA_JANELA) {
+    const { data, error } = await admin
+      .from("conversations")
+      .select("contact_id, last_inbound_at")
+      .eq("organization_id", entrada.organizationId)
+      .eq("channel_session_id", entrada.channelSessionId)
+      .gte("last_inbound_at", desde)
+      .order("id", { ascending: true })
+      .range(de, de + PAGINA_DA_JANELA - 1);
+    if (error) throw new Error(`preparação: janela de 24h — ${error.message}`);
+    const linhas = (data ?? []) as Array<{ contact_id: string; last_inbound_at: string }>;
+    for (const l of linhas) {
+      const atual = ultimaEntrada.get(l.contact_id);
+      if (!atual || atual < l.last_inbound_at) ultimaEntrada.set(l.contact_id, l.last_inbound_at);
+    }
+    if (linhas.length < PAGINA_DA_JANELA) break;
+  }
+
+  return (c) =>
+    foraDaJanela({
+      tipo: entrada.tipo,
+      provider,
+      ultimaEntrada: ultimaEntrada.get(c.contactId) ?? null,
+      agora: entrada.agora,
+    });
+}
+
+/**
+ * O que fica congelado no destinatário. No modelo, também o valor de cada
+ * parâmetro — já resolvido com os campos do contato e com `{{saudacao}}` ainda
+ * literal, como o `rendered_body`. O envio só resolve a saudação: reler os
+ * campos na hora mandaria um valor que o operador não viu na lista.
+ */
+function variaveisCongeladas(
+  mensagem: MensagemDaCampanha,
+  linha: ReturnType<typeof classificarAudiencia>[number],
+): Record<string, unknown> {
+  const base = { nome: linha.candidato.nome };
+  if (mensagem.tipo !== "template" || !linha.elegivel) return base;
+  const p = resolverParametrosDoModelo(mensagem.parametros, valoresDoCandidato(linha.candidato));
+  return { ...base, template_values: p.valores };
 }
 
 /**
@@ -140,7 +252,7 @@ export async function prepararCampanha(
     campanhaId: string;
     organizationId: string;
     filtro: unknown;
-    corpo: string;
+    mensagem: MensagemDaCampanha;
     contentVersion: number;
     agora: Date;
   },
@@ -153,7 +265,7 @@ export async function prepararCampanha(
   const { linhas } = await classificar(admin, {
     organizationId: entrada.organizationId,
     filtro: filtro.data,
-    corpo: entrada.corpo,
+    mensagem: entrada.mensagem,
     agora: entrada.agora,
     campanhaId: entrada.campanhaId,
   });
@@ -180,7 +292,7 @@ export async function prepararCampanha(
     exclusion_reason: l.motivo,
     rendered_body: l.corpo,
     content_version: entrada.contentVersion,
-    variables: { nome: l.candidato.nome },
+    variables: variaveisCongeladas(entrada.mensagem, l),
     cancelled_at: null,
     created_at: agoraIso,
   }));

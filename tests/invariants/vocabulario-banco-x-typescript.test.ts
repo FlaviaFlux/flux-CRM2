@@ -503,6 +503,14 @@ const PARES: Array<{
     simbolo: "STATUS_DO_DESTINATARIO",
   },
   {
+    tabela: "campaigns",
+    coluna: "message_kind",
+    // lib/campanhas/tipos.ts → TIPOS_DE_MENSAGEM. Migration 0800 (distribuição
+    // Flux): campanha que envia modelo aprovado da Meta.
+    arquivo: "lib/campanhas/tipos.ts",
+    simbolo: "TIPOS_DE_MENSAGEM",
+  },
+  {
     tabela: "external_db_connections",
     coluna: "source_mode",
     arquivo: "lib/external-db/types.ts",

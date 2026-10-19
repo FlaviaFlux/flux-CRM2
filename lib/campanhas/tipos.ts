@@ -7,6 +7,17 @@
  * colunas que têm CHECK e reprova divergência.
  */
 
+/**
+ * O que a campanha envia (migration 0800, CHECK `campaigns_message_kind_check`).
+ *
+ * `text` é o texto livre de sempre (`message_body`). `template` é um modelo
+ * aprovado da Meta — o único conteúdo que um número da API oficial pode mandar
+ * para quem não falou com a empresa nas últimas 24h.
+ */
+export const TIPOS_DE_MENSAGEM = ["text", "template"] as const;
+
+export type TipoDeMensagem = (typeof TIPOS_DE_MENSAGEM)[number];
+
 export const STATUS_DA_CAMPANHA = [
   "draft",
   "preparing",
@@ -78,6 +89,12 @@ export const MOTIVOS_DE_EXCLUSAO = [
   "suprimido",
   /** Spec 21: o contato virou pessoal e saiu da campanha com a saída própria. */
   "contato_pessoal",
+  /**
+   * Campanha de TEXTO num número que só aceita texto livre dentro da janela de
+   * 24h (API oficial), para quem está fora dela. A plataforma recusaria (131047);
+   * melhor a pessoa aparecer em "Fora da lista" do que em "Falharam".
+   */
+  "janela_fechada",
 ] as const;
 
 export type MotivoDeExclusao = (typeof MOTIVOS_DE_EXCLUSAO)[number];
@@ -95,4 +112,5 @@ export const TEXTO_DA_EXCLUSAO: Record<MotivoDeExclusao, string> = {
   ja_em_campanha: "Já está em outra campanha ainda não concluída",
   suprimido: "Está na lista de exclusão de campanhas",
   contato_pessoal: "Contato marcado como pessoal",
+  janela_fechada: "Fora da janela de 24h do número oficial — use um modelo aprovado",
 };

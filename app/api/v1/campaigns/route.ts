@@ -17,6 +17,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { FILTRO_VAZIO } from "@/lib/campanhas/audiencia";
+import { conferirModeloDaCampanha } from "@/lib/campanhas/conferir-modelo";
 import { gravarPool } from "@/lib/campanhas/pool-de-numeros";
 import {
   codificarCursor,
@@ -34,7 +35,7 @@ export const dynamic = "force-dynamic";
 const COLUNAS_DA_LISTA =
   "id, name, status, channel_session_id, snapshot_total, snapshot_eligible, snapshot_excluded, " +
   "scheduled_at, started_at, completed_at, cancelled_at, created_at, created_by, " +
-  "pipeline_id, stage_id, agent_id";
+  "pipeline_id, stage_id, agent_id, message_kind, template_name, template_language";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -128,6 +129,25 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
+  // Campanha de modelo (0800): o modelo é conferido AGORA contra o espelho do
+  // número — aprovado, deste número, todo parâmetro com fonte — e o texto dele
+  // vira o `message_body` que a prévia, a lista e a conversa mostram.
+  const modelo = entrada.message_kind === "template";
+  let corpo = entrada.message_body ?? null;
+  if (modelo) {
+    const conferido = await conferirModeloDaCampanha(supabase, {
+      organizationId: org.orgId,
+      channelSessionId: entrada.channel_session_id,
+      name: entrada.template_name ?? "",
+      language: entrada.template_language ?? "",
+      params: entrada.template_params ?? {},
+    });
+    if (!conferido.ok) {
+      return fail("campanha_conteudo_invalido", t(conferido.mensagem), 422, { requestId });
+    }
+    corpo = conferido.corpo;
+  }
+
   const { data, error } = await supabase
     .from("campaigns")
     .insert({
@@ -135,7 +155,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       name: entrada.name,
       description: entrada.description ?? null,
       channel_session_id: entrada.channel_session_id,
-      message_body: entrada.message_body ?? null,
+      message_body: corpo,
+      message_kind: modelo ? "template" : "text",
+      template_name: modelo ? (entrada.template_name ?? null) : null,
+      template_language: modelo ? (entrada.template_language ?? null) : null,
+      template_params: modelo ? (entrada.template_params ?? {}) : {},
       base_legal: entrada.base_legal,
       lia_ref: entrada.lia_ref ?? null,
       audience_filter: entrada.audience_filter ?? FILTRO_VAZIO,
@@ -182,7 +206,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     resourceType: "campaign",
     resourceId: criada.id,
     requestId,
-    metadata: { base_legal: entrada.base_legal, numeros: 1 + (entrada.channel_session_ids ?? []).length },
+    metadata: {
+      base_legal: entrada.base_legal,
+      numeros: 1 + (entrada.channel_session_ids ?? []).length,
+      message_kind: modelo ? "template" : "text",
+      ...(modelo ? { template_name: entrada.template_name, template_language: entrada.template_language } : {}),
+    },
   });
 
   return ok(data, { requestId, status: 201 });

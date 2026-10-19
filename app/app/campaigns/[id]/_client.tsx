@@ -216,6 +216,11 @@ export function DetalheDaCampanha({ id }: { id: string }) {
 
       <Card className="space-y-2 p-4">
         <h2 className="font-medium">{t("Mensagem")}</h2>
+        {c.message_kind === "template" && (
+          <p className="text-xs text-muted-foreground">
+            {t("Modelo aprovado")}: <span className="font-mono">{c.template_name}</span> ({c.template_language})
+          </p>
+        )}
         <p className="whitespace-pre-wrap text-sm">{c.message_body}</p>
         <p className="text-xs text-muted-foreground">
           {t("Base legal")}: {c.base_legal === "consent" ? t("consentimento") : t("interesse legítimo")}
@@ -254,10 +259,13 @@ export function DetalheDaCampanha({ id }: { id: string }) {
                 <span className="min-w-0 truncate">
                   {rotuloDoContato(d.contacts, t)}
                 </span>
-                <span className="shrink-0 text-muted-foreground">
+                <span className="shrink-0 text-right text-muted-foreground">
                   {d.eligibility_status === "excluded"
                     ? t(d.legenda_da_exclusao ?? rotuloDoMotivo(d.exclusion_reason))
                     : t(ROTULO_DO_DESTINATARIO[d.status] ?? d.status)}
+                  {d.status === "failed" && d.legenda_da_falha && (
+                    <span className="block max-w-xs text-xs text-error-fg">{t(d.legenda_da_falha)}</span>
+                  )}
                 </span>
               </div>
             ))}

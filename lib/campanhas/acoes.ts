@@ -21,11 +21,18 @@ import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
 
 import { baseLegalValida, motivoParaExcluir, recusouMarketing } from "./elegibilidade";
+import {
+  COLUNAS_DO_CONTEUDO,
+  conteudoDoEnvio,
+  mensagemDaCampanha,
+  tipoDaCampanha,
+} from "./envio-da-campanha";
 import { ehStatusDaCampanha, podeTransitar } from "./maquina-de-estados";
+import { lerPoolExtra, gravarPool } from "./pool-de-numeros";
 import { prepararCampanha } from "./preparacao";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { logger } from "@/lib/logger";
 import { camposDoDestinatario } from "./consulta-de-audiencia";
-import { renderizar } from "./renderizador";
 import type { StatusDaCampanha } from "./tipos";
 
 export interface CampanhaCarregada {
@@ -47,6 +54,15 @@ export interface CampanhaCarregada {
   teto_diario: number | null;
   teto_horario: number | null;
   description: string | null;
+  /** Migration 0800: `text` ou `template` (modelo aprovado da Meta). */
+  message_kind: string | null;
+  template_name: string | null;
+  template_language: string | null;
+  template_params: unknown;
+  /** Migration 0378 — carregados para a cópia levar o destino de quem responde. */
+  pipeline_id: string | null;
+  stage_id: string | null;
+  agent_id: string | null;
 }
 
 export type Recusa = { ok: false; codigo: ApiErrorCode; mensagem: string; status: number };
@@ -55,7 +71,9 @@ export type Desfecho<T = unknown> = ({ ok: true } & T) | Recusa;
 const COLUNAS =
   "id, organization_id, name, status, channel_session_id, message_body, base_legal, lia_ref, " +
   "audience_filter, audience_version, content_version, scheduled_at, description, " +
-  "intervalo_segundos, janela_inicio_hora, janela_fim_hora, teto_diario, teto_horario";
+  "intervalo_segundos, janela_inicio_hora, janela_fim_hora, teto_diario, teto_horario, " +
+  "pipeline_id, stage_id, agent_id, " +
+  COLUNAS_DO_CONTEUDO;
 
 export async function carregarCampanha(
   admin: SupabaseClient,
@@ -95,6 +113,17 @@ function recusaDeTransicao(de: StatusDaCampanha, para: StatusDaCampanha): Recusa
 
 /** O que toda campanha precisa ter antes de qualquer envio — inclusive o de teste. */
 function faltaParaEnviar(c: CampanhaCarregada): Recusa | null {
+  if (
+    tipoDaCampanha(c) === "template" &&
+    ((c.template_name ?? "").trim() === "" || (c.template_language ?? "").trim() === "")
+  ) {
+    return {
+      ok: false,
+      codigo: "campanha_conteudo_invalido",
+      mensagem: "Escolha o modelo aprovado antes de preparar a campanha.",
+      status: 422,
+    };
+  }
   if ((c.message_body ?? "").trim() === "") {
     return {
       ok: false,
@@ -163,7 +192,7 @@ export async function prepararAcao(
       campanhaId: c.id,
       organizationId: c.organization_id,
       filtro: c.audience_filter,
-      corpo: c.message_body ?? "",
+      mensagem: mensagemDaCampanha(c),
       contentVersion: c.content_version,
       agora,
     });
@@ -352,6 +381,16 @@ export async function duplicarAcao(
       janela_fim_hora: c.janela_fim_hora,
       teto_diario: c.teto_diario,
       teto_horario: c.teto_horario,
+      // O conteúdo inteiro, inclusive o modelo aprovado e o mapeamento dos
+      // parâmetros (0800), e o destino de quem responde (0378): a cópia que
+      // perdesse o modelo voltaria a ser campanha de texto num número oficial.
+      message_kind: tipoDaCampanha(c),
+      template_name: c.template_name,
+      template_language: c.template_language,
+      template_params: c.template_params ?? {},
+      pipeline_id: c.pipeline_id,
+      stage_id: c.stage_id,
+      agent_id: c.agent_id,
       created_by: autorId,
       // Nada de destinatário, resultado, agenda ou carimbo de execução: a cópia
       // é uma INTENÇÃO nova, e herdar números faria a tela mostrar entrega de
@@ -367,7 +406,27 @@ export async function duplicarAcao(
       status: 422,
     };
   }
-  return { ok: true, id: (data as { id: string }).id };
+  const id = (data as { id: string }).id;
+
+  // O rodízio também é parte do que se duplica. Falha aqui não desfaz a cópia —
+  // mesma decisão da criação: a campanha existe e fala pelo número principal.
+  try {
+    const extras = await lerPoolExtra(admin, c.organization_id, c.id);
+    if (extras.length > 0) {
+      await gravarPool(admin, {
+        organizationId: c.organization_id,
+        campanhaId: id,
+        principal: c.channel_session_id,
+        extras,
+      });
+    }
+  } catch (err) {
+    logger.warn("[campanha] cópia do rodízio falhou; a cópia fala pelo número principal", {
+      campanha: id,
+      motivo: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return { ok: true, id };
 }
 
 /**
@@ -435,16 +494,19 @@ export async function testarAcao(
   // Os campos personalizados que o TEXTO usa entram aqui pelo MESMO caminho da
   // prévia: teste que não resolvia `{{lead.gancho}}` reprovaria o texto que o
   // envio manda certo.
+  const mensagemDoTeste = mensagemDaCampanha(c);
   const campos = await camposDoDestinatario(admin, {
     organizationId: c.organization_id,
     contactId: linha.id,
-    corpo: c.message_body ?? "",
+    corpo: [mensagemDoTeste.corpo, ...Object.values(mensagemDoTeste.parametros)].join("\n"),
   });
-  const render = renderizar(
-    c.message_body ?? "",
-    { nome: nomeDoContato(linha), ...campos },
-    { agora, fuso },
-  );
+  // O MESMO montador da rodada: texto ou modelo, com os parâmetros resolvidos
+  // para este contato. Teste por outro caminho provaria outro caminho.
+  const render = conteudoDoEnvio(c, {
+    corpoCongelado: c.message_body ?? "",
+    valores: { nome: nomeDoContato(linha), ...campos },
+    quando: { agora, fuso },
+  });
   if (render.faltando.length > 0) {
     return {
       ok: false,
@@ -466,18 +528,23 @@ export async function testarAcao(
     } as Parameters<typeof sendMessageHandler>[1],
     {
       conversation_id: boundary.conversation_id,
-      type: "text",
-      body: render.texto,
+      ...render.conteudo,
       metadata: { source: "campaign_test", campaign_id: c.id },
     } as Parameters<typeof sendMessageHandler>[2],
   );
 
   const status = (mensagem as { status?: string }).status ?? "desconhecido";
   if (status === "failed") {
+    // O motivo real do canal (no modelo: "não aprovado", "falta o {{2}}", o
+    // código da Meta) vale mais que "verifique a conexão" — que manda o
+    // operador procurar o defeito no lugar errado.
+    const detalhe = (mensagem as { error_message?: string | null }).error_message;
     return {
       ok: false,
       codigo: "campanha_canal_indisponivel",
-      mensagem: "O envio de teste falhou no canal. Verifique a conexão antes de iniciar a campanha.",
+      mensagem: detalhe
+        ? `O envio de teste falhou no canal: ${detalhe}`
+        : "O envio de teste falhou no canal. Verifique a conexão antes de iniciar a campanha.",
       status: 409,
     };
   }

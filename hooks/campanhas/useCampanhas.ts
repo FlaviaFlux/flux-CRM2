@@ -50,6 +50,11 @@ export interface CampanhaDetalhada extends CampanhaDaLista {
   janela_fim_hora: number | null;
   teto_diario: number | null;
   teto_horario: number | null;
+  /** Migration 0800: `template` = modelo aprovado da Meta; `text` (ou ausente) = texto livre. */
+  message_kind?: string | null;
+  template_name?: string | null;
+  template_language?: string | null;
+  template_params?: Record<string, string> | null;
 }
 
 export interface Destinatario {
@@ -61,6 +66,9 @@ export interface Destinatario {
   eligibility_status: string;
   exclusion_reason: string | null;
   legenda_da_exclusao: string | null;
+  /** Código da falha (o da Meta quando houver, ex. `131026`) e a frase da lista "Falharam". */
+  last_error_code?: string | null;
+  legenda_da_falha?: string | null;
   sent_at: string | null;
   delivered_at: string | null;
   read_at: string | null;
@@ -184,6 +192,9 @@ export function usePreviaDaAudiencia() {
       audience_filter: Record<string, unknown>;
       message_body: string;
       campaign_id?: string;
+      channel_session_id?: string;
+      message_kind?: "text" | "template";
+      template_params?: Record<string, string>;
     }) => (await apiClient.post<{ data: PreviaDaAudiencia }>("/api/v1/campaigns/preview", corpo)).data,
     onError: (err) => showApiError(err),
   });

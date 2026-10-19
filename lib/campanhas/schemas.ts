@@ -6,6 +6,25 @@
 import { z } from "zod";
 
 import { filtroDeAudienciaSchema } from "./audiencia";
+import { TIPOS_DE_MENSAGEM } from "./tipos";
+
+/**
+ * Parâmetros do modelo (migration 0800): `slotKey` → texto com variáveis da
+ * campanha ou texto fixo. A chave segue o formato de `slotKey` (`1`,
+ * `header:1`, `button0:1`, `card0:1`), e a conferência contra o modelo de
+ * verdade é da rota, que lê a definição aprovada.
+ */
+export const parametrosDoModeloSchema = z
+  .record(z.string().regex(/^[a-z0-9:_]{1,64}$/i), z.string().max(1024))
+  .refine((r) => Object.keys(r).length <= 40, { message: "Parâmetros demais para um modelo." });
+
+/** O que a campanha manda. Os três campos do modelo só valem com `message_kind: "template"`. */
+const conteudoDaCampanha = {
+  message_kind: z.enum(TIPOS_DE_MENSAGEM).optional(),
+  template_name: z.string().trim().min(1).max(512).nullable().optional(),
+  template_language: z.string().trim().min(2).max(16).nullable().optional(),
+  template_params: parametrosDoModeloSchema.optional(),
+};
 
 /**
  * O ritmo próprio. Todos opcionais e anuláveis: `null` devolve a decisão ao
@@ -44,11 +63,24 @@ const baseDaCampanha = {
   pipeline_id: z.string().uuid().nullable().optional(),
   stage_id: z.string().uuid().nullable().optional(),
   agent_id: z.string().uuid().nullable().optional(),
+  ...conteudoDaCampanha,
 };
 
 export const criarCampanhaSchema = z
   .object({ ...baseDaCampanha })
   .merge(ritmoSchema)
+  .refine(
+    (c) =>
+      c.message_kind !== "template" ||
+      ((c.template_name ?? "").trim() !== "" && (c.template_language ?? "").trim() !== ""),
+    { message: "Escolha o modelo aprovado.", path: ["template_name"] },
+  )
+  .refine((c) => c.message_kind !== "template" || (c.channel_session_ids ?? []).length === 0, {
+    message:
+      "Campanha de modelo aprovado fala só pelo número oficial escolhido — o modelo é da conta dele, " +
+      "e outro número do rodízio pode não ter o mesmo modelo.",
+    path: ["channel_session_ids"],
+  })
   .refine(
     (c) => c.base_legal !== "legitimate_interest" || (c.lia_ref ?? "").trim() !== "",
     {
@@ -84,6 +116,7 @@ export const editarCampanhaSchema = z
     pipeline_id: baseDaCampanha.pipeline_id,
     stage_id: baseDaCampanha.stage_id,
     agent_id: baseDaCampanha.agent_id,
+    ...conteudoDaCampanha,
   })
   .merge(ritmoSchema);
 
@@ -91,6 +124,10 @@ export const previaSchema = z.object({
   audience_filter: filtroDeAudienciaSchema,
   message_body: z.string().max(4096).default(""),
   campaign_id: z.string().uuid().optional(),
+  /** O número principal: é contra a janela dele que a prévia de texto conta quem fica fora. */
+  channel_session_id: z.string().uuid().optional(),
+  message_kind: z.enum(TIPOS_DE_MENSAGEM).default("text"),
+  template_params: parametrosDoModeloSchema.optional(),
 });
 
 export const criarTemplateSchema = z.object({

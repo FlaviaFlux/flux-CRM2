@@ -105,6 +105,13 @@ export interface ContextoDaClassificacao {
   suprimidos: ReadonlySet<string>;
   /** O hash de um endereço — injetado para esta função continuar pura. */
   hashDoEndereco: (endereco: string) => string;
+  /**
+   * A pessoa está fora da janela de 24h de um número que só aceita texto livre
+   * dentro dela? Ausente = a campanha não depende de janela (número QR, ou
+   * campanha de MODELO, que é justamente o que sai fora da janela). A regra de
+   * quando perguntar mora em `janela-da-campanha.ts`.
+   */
+  janelaFechada?: (c: CandidatoDaAudiencia) => boolean;
   /** Renderiza o texto e diz o que faltou. Injetado para esta função ficar pura. */
   renderizar: (c: CandidatoDaAudiencia) => { texto: string; faltando: string[] };
 }
@@ -161,6 +168,10 @@ export function classificarAudiencia(
     }
     if (enderecosVistos.has(endereco)) {
       excluir("duplicado");
+      continue;
+    }
+    if (ctx.janelaFechada?.(candidato)) {
+      excluir("janela_fechada");
       continue;
     }
     const { texto, faltando } = ctx.renderizar(candidato);
