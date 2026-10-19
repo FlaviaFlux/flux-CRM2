@@ -14,6 +14,8 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { carregarCampanha } from "@/lib/campanhas/acoes";
+import { conferirModeloDaCampanha } from "@/lib/campanhas/conferir-modelo";
+import { parametrosGuardados, tipoDaCampanha } from "@/lib/campanhas/envio-da-campanha";
 import { ehEditavel, ehTerminal } from "@/lib/campanhas/maquina-de-estados";
 import { gravarPool, lerPoolExtra } from "@/lib/campanhas/pool-de-numeros";
 import { editarCampanhaSchema } from "@/lib/campanhas/schemas";
@@ -29,7 +31,8 @@ const COLUNAS =
   "audience_filter, audience_version, content_version, snapshot_total, snapshot_eligible, " +
   "snapshot_excluded, scheduled_at, prepared_at, started_at, paused_at, completed_at, " +
   "cancelled_at, failure_code, intervalo_segundos, janela_inicio_hora, janela_fim_hora, " +
-  "teto_diario, teto_horario, pipeline_id, stage_id, agent_id, created_at, created_by";
+  "teto_diario, teto_horario, pipeline_id, stage_id, agent_id, created_at, created_by, " +
+  "message_kind, template_name, template_language, template_params";
 
 export async function GET(
   _req: NextRequest,
@@ -159,9 +162,64 @@ export async function PATCH(
   }
   if (entrada.base_legal !== undefined) mudanca.base_legal = entrada.base_legal;
   if (entrada.lia_ref !== undefined) mudanca.lia_ref = entrada.lia_ref;
+
+  // ═══ Modelo aprovado (0800) ═══
+  // O estado EFETIVO depois da edição — o que veio no corpo por cima do que já
+  // está gravado. Trocar só o número de uma campanha de modelo também reconfere:
+  // o modelo é da conta do número, e o novo pode não tê-lo.
+  const tipoEfetivo = entrada.message_kind ?? tipoDaCampanha(campanha);
+  const mexeNoModelo =
+    entrada.message_kind !== undefined ||
+    entrada.template_name !== undefined ||
+    entrada.template_language !== undefined ||
+    entrada.template_params !== undefined ||
+    entrada.channel_session_id !== undefined;
+  if (tipoEfetivo === "template") {
+    if ((entrada.channel_session_ids ?? []).length > 0) {
+      return fail(
+        "campanha_conteudo_invalido",
+        t("Campanha de modelo aprovado fala só pelo número oficial escolhido — tire os números extras do rodízio."),
+        422,
+        { requestId },
+      );
+    }
+    // No modelo o corpo é derivado da definição aprovada; texto vindo da tela
+    // não o substitui.
+    delete mudanca.message_body;
+    if (mexeNoModelo) {
+      const nome = entrada.template_name === undefined ? campanha.template_name : entrada.template_name;
+      const idioma =
+        entrada.template_language === undefined ? campanha.template_language : entrada.template_language;
+      const params = entrada.template_params ?? parametrosGuardados(campanha.template_params);
+      const conferido = await conferirModeloDaCampanha(supabase, {
+        organizationId: authz.org.orgId,
+        channelSessionId: entrada.channel_session_id ?? campanha.channel_session_id,
+        name: nome ?? "",
+        language: idioma ?? "",
+        params,
+      });
+      if (!conferido.ok) {
+        return fail("campanha_conteudo_invalido", t(conferido.mensagem), 422, { requestId });
+      }
+      mudanca.message_kind = "template";
+      mudanca.template_name = nome;
+      mudanca.template_language = idioma;
+      mudanca.template_params = params;
+      // O texto do modelo, não o que o corpo trouxe: a fonte é a definição aprovada.
+      mudanca.message_body = conferido.corpo;
+    }
+  } else if (entrada.message_kind === "text") {
+    // Voltar para texto apaga o modelo: deixá-lo gravado faria a duplicação
+    // ressuscitar um modelo que o operador desistiu de usar.
+    mudanca.message_kind = "text";
+    mudanca.template_name = null;
+    mudanca.template_language = null;
+    mudanca.template_params = {};
+  }
+
   // Mexer no TEXTO sobe a versão do conteúdo: é ela que o destinatário carrega,
   // e é por ela que se sabe se a mensagem preparada é a mensagem de hoje.
-  if (entrada.message_body !== undefined && entrada.message_body !== campanha.message_body) {
+  if (mudanca.message_body !== undefined && mudanca.message_body !== campanha.message_body) {
     mudanca.content_version = campanha.content_version + 1;
   }
 
@@ -203,12 +261,16 @@ export async function PATCH(
     );
   }
 
-  if (entrada.channel_session_ids !== undefined) {
+  // Campanha que virou modelo perde o rodízio que tinha como texto: o worker já
+  // fala só pelo principal, e a tela não pode prometer números que não falam.
+  const extrasDesejados =
+    tipoEfetivo === "template" && entrada.message_kind === "template" ? [] : entrada.channel_session_ids;
+  if (extrasDesejados !== undefined) {
     const r = await gravarPool(supabase, {
       organizationId: authz.org.orgId,
       campanhaId: id,
       principal: (data as unknown as { channel_session_id: string }).channel_session_id,
-      extras: entrada.channel_session_ids,
+      extras: extrasDesejados,
     });
     if (!r.ok) {
       return fail(

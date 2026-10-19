@@ -52,7 +52,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     const resumo = await preverAudiencia(admin, {
       organizationId: authz.org.orgId,
       filtro: parsed.data.audience_filter,
-      corpo: parsed.data.message_body,
+      // O número entra para a prévia contar quem fica fora da janela de 24h
+      // (campanha de texto em número oficial). Consulta filtrada pela
+      // organização do papel: id de outro tenant não acha número nenhum.
+      mensagem: {
+        tipo: parsed.data.message_kind,
+        corpo: parsed.data.message_body,
+        parametros: parsed.data.message_kind === "template" ? (parsed.data.template_params ?? {}) : {},
+        channelSessionId: parsed.data.channel_session_id ?? null,
+      },
       agora: new Date(),
       campanhaId: parsed.data.campaign_id,
     });
