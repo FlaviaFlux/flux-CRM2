@@ -18,7 +18,9 @@ describe("codigoDaMeta", () => {
 describe("codigoDaFalha", () => {
   it("prefere o código da Meta, depois o prefixo interno, depois send_failed", () => {
     expect(codigoDaFalha("meta_131042: Business eligibility payment issue")).toBe("131042");
-    expect(codigoDaFalha('template_not_approved: "x" (pt_BR) está PAUSED')).toBe("template_not_approved");
+    expect(codigoDaFalha('template_not_approved: "x" (pt_BR) está PAUSED')).toBe(
+      "template_not_approved",
+    );
     expect(codigoDaFalha("algo estranho")).toBe("send_failed");
     expect(codigoDaFalha(undefined)).toBe("send_failed");
   });

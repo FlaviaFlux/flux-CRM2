@@ -22,7 +22,8 @@ export interface ConteudoDaCampanha {
   template_params?: unknown;
 }
 
-export const COLUNAS_DO_CONTEUDO = "message_kind, template_name, template_language, template_params";
+export const COLUNAS_DO_CONTEUDO =
+  "message_kind, template_name, template_language, template_params";
 
 export function tipoDaCampanha(c: Pick<ConteudoDaCampanha, "message_kind">): TipoDeMensagem {
   return c.message_kind === "template" ? "template" : "text";

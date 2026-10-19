@@ -52,7 +52,12 @@ describe("preparação: o veto janela_fechada na classificação", () => {
     anonimizado: false,
     recusouMarketing: false,
   };
-  const bia: CandidatoDaAudiencia = { ...ana, contactId: "bia", nome: "Bia", telefone: "+5544999990002" };
+  const bia: CandidatoDaAudiencia = {
+    ...ana,
+    contactId: "bia",
+    nome: "Bia",
+    telefone: "+5544999990002",
+  };
   const ultimaEntrada: Record<string, string | null> = { ana: HA_2H, bia: null };
 
   const classificar = (tipo: "text" | "template") =>

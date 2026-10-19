@@ -17,8 +17,7 @@ import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 import { corpoDoModelo, errosDoMapeamento } from "./modelo-da-campanha";
 
 export type ConferenciaDoModelo =
-  | { ok: true; corpo: string; categoria: string | null }
-  | { ok: false; mensagem: string };
+  { ok: true; corpo: string; categoria: string | null } | { ok: false; mensagem: string };
 
 /** O número aceita campanha de modelo? Só o da API oficial, cujos modelos o espelho guarda. */
 export async function numeroAceitaModelo(

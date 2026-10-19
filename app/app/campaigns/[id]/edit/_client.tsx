@@ -30,7 +30,14 @@ import { useCampanha, useEditarCampanha, usePreviaDaAudiencia } from "@/hooks/ca
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useT } from "@/hooks/i18n/useT";
 import { useAgentesPublicados, useEtapas, useFunis } from "@/hooks/campanhas/useDestinoDaCampanha";
+import {
+  ModeloDaCampanha,
+  resumirModelo,
+  useModelosAprovados,
+  type EscolhaDoModelo,
+} from "@/components/campanhas/ModeloDaCampanha";
 import { DESCRICAO_DA_VARIAVEL, VARIAVEIS_DA_CAMPANHA } from "@/lib/campanhas/renderizador";
+import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 
 export function EditarCampanha({ id }: { id: string }) {
   const t = useT();
@@ -53,10 +60,25 @@ export function EditarCampanha({ id }: { id: string }) {
   const [etapa, setEtapa] = useState("");
   const [agente, setAgente] = useState("");
   const [carregado, setCarregado] = useState(false);
+  const [tipo, setTipo] = useState<"text" | "template">("text");
+  const [modelo, setModelo] = useState<EscolhaDoModelo>({ nome: "", idioma: "", params: {} });
 
   const funis = useFunis();
   const etapas = useEtapas(funil || null);
   const agentes = useAgentesPublicados();
+
+  // Número oficial: a mensagem pode ser modelo aprovado (migration 0800).
+  const canalEscolhido = (canais.data ?? []).find((s) => s.id === canal) ?? null;
+  const oficial = fonteDeTemplates(canalEscolhido?.provider) === "oficial";
+  const usaModelo = oficial && tipo === "template";
+  const { aprovados } = useModelosAprovados(oficial ? "oficial" : null);
+  const resumoDoModelo = usaModelo
+    ? resumirModelo(
+        aprovados.find((m) => m.name === modelo.nome && m.language === modelo.idioma) ?? null,
+        modelo.params,
+      )
+    : null;
+  const corpoDaMensagem = usaModelo ? (resumoDoModelo?.corpo ?? "") : texto.trim();
 
   // Uma carga só: depois disso quem manda é o que a pessoa está digitando. Sem
   // a trava, o `refetchInterval` do detalhe apagaria a edição em andamento.
@@ -76,6 +98,15 @@ export function EditarCampanha({ id }: { id: string }) {
     setFunil(c.pipeline_id ?? "");
     setEtapa(c.stage_id ?? "");
     setAgente(c.agent_id ?? "");
+    setTipo(c.message_kind === "template" ? "template" : "text");
+    setModelo({
+      nome: c.template_name ?? "",
+      idioma: c.template_language ?? "",
+      params: c.template_params ?? {},
+    });
+    // O texto livre de uma campanha de modelo é o texto DO modelo, derivado;
+    // ele não volta para o campo de texto se o operador trocar para texto livre.
+    if (c.message_kind === "template") setTexto("");
     setCarregado(true);
   }, [campanha.data, carregado]);
 
@@ -138,7 +169,7 @@ export function EditarCampanha({ id }: { id: string }) {
   const podeSalvar =
     nome.trim() !== "" &&
     canal !== "" &&
-    texto.trim() !== "" &&
+    (usaModelo ? !!resumoDoModelo?.completo : texto.trim() !== "") &&
     temCriterio &&
     (baseLegal !== "legitimate_interest" || liaRef.trim() !== "");
 
@@ -163,7 +194,14 @@ export function EditarCampanha({ id }: { id: string }) {
             id="e-canal"
             className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
             value={canal}
-            onChange={(e) => setCanal(e.target.value)}
+            onChange={(e) => {
+              setCanal(e.target.value);
+              const escolhido = (canais.data ?? []).find((s) => s.id === e.target.value) ?? null;
+              // Trocar de número troca a conta dos modelos: o escolhido antes
+              // pode não existir no novo.
+              setTipo(fonteDeTemplates(escolhido?.provider) === "oficial" ? "template" : "text");
+              setModelo({ nome: "", idioma: "", params: {} });
+            }}
           >
             {(canais.data ?? []).map((s) => (
               <option key={s.id} value={s.id}>
@@ -248,7 +286,16 @@ export function EditarCampanha({ id }: { id: string }) {
             type="button"
             variant="outline"
             disabled={!temCriterio || previa.isPending}
-            onClick={() => previa.mutate({ audience_filter: filtro, message_body: texto, campaign_id: id })}
+            onClick={() =>
+              previa.mutate({
+                audience_filter: filtro,
+                message_body: corpoDaMensagem,
+                campaign_id: id,
+                ...(canal ? { channel_session_id: canal } : {}),
+                message_kind: usaModelo ? "template" : "text",
+                ...(usaModelo ? { template_params: modelo.params } : {}),
+              })
+            }
           >
             {previa.isPending ? t("Contando…") : t("Ver quantas pessoas")}
           </Button>
@@ -333,26 +380,62 @@ export function EditarCampanha({ id }: { id: string }) {
 
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Mensagem")}</h2>
-        <Textarea
-          rows={6}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          aria-label={t("Texto da mensagem")}
-        />
-        <ul className="space-y-1 text-sm text-muted-foreground">
-          {VARIAVEIS_DA_CAMPANHA.map((v) => (
-            <li key={v}>
-              <button
-                type="button"
-                className="rounded-md bg-surface-elevated px-1 font-mono text-xs"
-                onClick={() => setTexto((atual) => `${atual}{{${v}}}`)}
-              >
-                {`{{${v}}}`}
-              </button>{" "}
-              — {t(DESCRICAO_DA_VARIAVEL[v])}
-            </li>
-          ))}
-        </ul>
+        {oficial && (
+          <fieldset className="space-y-2">
+            <legend className="sr-only">{t("Tipo de mensagem")}</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="e-tipo-de-mensagem"
+                checked={tipo === "template"}
+                onChange={() => setTipo("template")}
+              />
+              {t("Modelo aprovado da Meta — chega a qualquer contato")}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="e-tipo-de-mensagem"
+                checked={tipo === "text"}
+                onChange={() => setTipo("text")}
+              />
+              {t("Texto livre — só para quem escreveu para este número nas últimas 24h")}
+            </label>
+          </fieldset>
+        )}
+        {usaModelo ? (
+          <ModeloDaCampanha fonte="oficial" valor={modelo} onChange={setModelo} />
+        ) : (
+          <>
+            <Textarea
+              rows={6}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              aria-label={t("Texto da mensagem")}
+            />
+            {oficial && (
+              <p className="text-sm text-warning-fg">
+                {t(
+                  "Quem não escreveu para este número nas últimas 24h fica fora da lista: a Meta recusa texto livre fora dessa janela.",
+                )}
+              </p>
+            )}
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              {VARIAVEIS_DA_CAMPANHA.map((v) => (
+                <li key={v}>
+                  <button
+                    type="button"
+                    className="rounded-md bg-surface-elevated px-1 font-mono text-xs"
+                    onClick={() => setTexto((atual) => `${atual}{{${v}}}`)}
+                  >
+                    {`{{${v}}}`}
+                  </button>{" "}
+                  — {t(DESCRICAO_DA_VARIAVEL[v])}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </Card>
 
       <div className="flex items-center justify-end gap-2">
@@ -365,7 +448,14 @@ export function EditarCampanha({ id }: { id: string }) {
             await salvar.mutateAsync({
               name: nome.trim(),
               channel_session_id: canal,
-              message_body: texto.trim(),
+              ...(usaModelo
+                ? {
+                    message_kind: "template",
+                    template_name: modelo.nome,
+                    template_language: modelo.idioma,
+                    template_params: modelo.params,
+                  }
+                : { message_kind: "text", message_body: texto.trim() }),
               base_legal: baseLegal,
               lia_ref: liaRef.trim() || null,
               audience_filter: filtro,

@@ -23,7 +23,8 @@ interface ErroConhecido {
 
 const ERROS: Record<string, ErroConhecido> = {
   "131042": {
-    texto: "Problema de pagamento na conta do WhatsApp Business (Meta). Regularize a forma de pagamento.",
+    texto:
+      "Problema de pagamento na conta do WhatsApp Business (Meta). Regularize a forma de pagamento.",
     definitivo: true,
   },
   "131026": {
@@ -79,7 +80,8 @@ const ERROS_DO_ENVIO: Record<string, string> = {
   template_not_approved: "O modelo não está aprovado na Meta.",
   template_missing_values: "Faltou valor para um parâmetro do modelo.",
   template_missing: "O modelo não está entre os modelos sincronizados deste número.",
-  template_stale: "O modelo mudou na Meta depois de configurado — ressincronize e revise a campanha.",
+  template_stale:
+    "O modelo mudou na Meta depois de configurado — ressincronize e revise a campanha.",
   parametro_vazio: "Um parâmetro do modelo ficou vazio para este contato.",
 };
 

@@ -32,7 +32,12 @@ const COM_LINK = {
 describe("slotsDoModelo", () => {
   it("lista a chave de cada parâmetro com o endereço — a mesma slotKey do envio", () => {
     expect(slotsDoModelo(PESQUISA).map((s) => s.chave)).toEqual(["1"]);
-    expect(slotsDoModelo(COM_LINK).map((s) => s.chave)).toEqual(["header:1", "1", "2", "button0:1"]);
+    expect(slotsDoModelo(COM_LINK).map((s) => s.chave)).toEqual([
+      "header:1",
+      "1",
+      "2",
+      "button0:1",
+    ]);
   });
 });
 
@@ -74,27 +79,39 @@ describe("resolverParametrosDoModelo", () => {
     const congelado = resolverParametrosDoModelo(params, { nome: "Ana" });
     expect(congelado.valores["1"]).toBe("{{saudacao}}, Ana");
 
-    const final = resolverParametrosDoModelo(congelado.valores, { nome: "Ana" }, {
-      agora: new Date("2026-10-19T13:00:00Z"),
-      fuso: "America/Sao_Paulo",
-    });
+    const final = resolverParametrosDoModelo(
+      congelado.valores,
+      { nome: "Ana" },
+      {
+        agora: new Date("2026-10-19T13:00:00Z"),
+        fuso: "America/Sao_Paulo",
+      },
+    );
     expect(final.valores["1"]).toBe("Bom dia, Ana");
   });
 
   it("valor do cadastro com chaves não vira token na segunda passada", () => {
     const congelado = resolverParametrosDoModelo({ "1": "{{nome}}" }, { nome: "{{saudacao}} Ana" });
-    const final = resolverParametrosDoModelo(congelado.valores, { nome: "x" }, {
-      agora: new Date("2026-10-19T13:00:00Z"),
-      fuso: "America/Sao_Paulo",
-    });
+    const final = resolverParametrosDoModelo(
+      congelado.valores,
+      { nome: "x" },
+      {
+        agora: new Date("2026-10-19T13:00:00Z"),
+        fuso: "America/Sao_Paulo",
+      },
+    );
     expect(final.valores["1"]).toBe("{{saudacao}} Ana");
   });
 
   it("no envio, quebra de linha e espaço em excesso viram um espaço (a Meta recusa parâmetro com \\n)", () => {
-    const final = resolverParametrosDoModelo({ "1": "Ana\n\tMaria     Souza" }, { nome: null }, {
-      agora: new Date("2026-10-19T13:00:00Z"),
-      fuso: "America/Sao_Paulo",
-    });
+    const final = resolverParametrosDoModelo(
+      { "1": "Ana\n\tMaria     Souza" },
+      { nome: null },
+      {
+        agora: new Date("2026-10-19T13:00:00Z"),
+        fuso: "America/Sao_Paulo",
+      },
+    );
     expect(final.valores["1"]).toBe("Ana Maria Souza");
   });
 });

@@ -31,7 +31,14 @@ import {
   useEtapas,
   useFunis,
 } from "@/hooks/campanhas/useDestinoDaCampanha";
+import {
+  ModeloDaCampanha,
+  resumirModelo,
+  useModelosAprovados,
+  type EscolhaDoModelo,
+} from "@/components/campanhas/ModeloDaCampanha";
 import { VARIAVEIS_DA_CAMPANHA, DESCRICAO_DA_VARIAVEL } from "@/lib/campanhas/renderizador";
+import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 
 export function NovaCampanha() {
   const t = useT();
@@ -39,6 +46,8 @@ export function NovaCampanha() {
   const canais = useChannelSessions();
   const criar = useCriarCampanha();
   const previa = usePreviaDaAudiencia();
+  const [tipo, setTipo] = useState<"text" | "template">("text");
+  const [modelo, setModelo] = useState<EscolhaDoModelo>({ nome: "", idioma: "", params: {} });
 
   const [nome, setNome] = useState("");
   const [canal, setCanal] = useState("");
@@ -85,18 +94,51 @@ export function NovaCampanha() {
     filtro.etapas.length > 0 ||
     filtro.sem_interacao_ha_dias !== null;
 
+  // Número oficial (Meta): a mensagem pode ser modelo aprovado. A tela não
+  // interpreta o provider — pergunta à mesma função que a Inbox usa.
+  const canalEscolhido = (canais.data ?? []).find((c) => c.id === canal) ?? null;
+  const oficial = fonteDeTemplates(canalEscolhido?.provider) === "oficial";
+  const usaModelo = oficial && tipo === "template";
+  const { aprovados } = useModelosAprovados(oficial ? "oficial" : null);
+  const resumoDoModelo = usaModelo
+    ? resumirModelo(
+        aprovados.find((m) => m.name === modelo.nome && m.language === modelo.idioma) ?? null,
+        modelo.params,
+      )
+    : null;
+  const corpoDaMensagem = usaModelo ? (resumoDoModelo?.corpo ?? "") : texto.trim();
+
   const podeSalvar =
     nome.trim() !== "" &&
     canal !== "" &&
-    texto.trim() !== "" &&
+    (usaModelo ? !!resumoDoModelo?.completo : texto.trim() !== "") &&
     temCriterio &&
     (baseLegal !== "legitimate_interest" || liaRef.trim() !== "");
+
+  function escolherCanal(id: string) {
+    setCanal(id);
+    const escolhido = (canais.data ?? []).find((c) => c.id === id) ?? null;
+    // Número oficial nasce com MODELO: texto livre ali só chega a quem escreveu
+    // nas últimas 24h, e quem cria campanha quase sempre quer falar com o resto.
+    const ehOficial = fonteDeTemplates(escolhido?.provider) === "oficial";
+    setTipo(ehOficial ? "template" : "text");
+    setModelo({ nome: "", idioma: "", params: {} });
+    if (ehOficial) setExtras([]);
+  }
 
   async function salvar() {
     const criada = await criar.mutateAsync({
       name: nome.trim(),
       channel_session_id: canal,
-      message_body: texto.trim(),
+      message_body: corpoDaMensagem,
+      ...(usaModelo
+        ? {
+            message_kind: "template",
+            template_name: modelo.nome,
+            template_language: modelo.idioma,
+            template_params: modelo.params,
+          }
+        : { message_kind: "text" }),
       base_legal: baseLegal,
       lia_ref: liaRef.trim() || null,
       audience_filter: filtro,
@@ -105,7 +147,7 @@ export function NovaCampanha() {
       janela_fim_hora: janelaFim ? Number(janelaFim) : null,
       teto_diario: tetoDiario ? Number(tetoDiario) : null,
       teto_horario: tetoHorario ? Number(tetoHorario) : null,
-      channel_session_ids: extras,
+      channel_session_ids: usaModelo ? [] : extras,
       pipeline_id: funil || null,
       stage_id: etapa || null,
       agent_id: agente || null,
@@ -139,7 +181,7 @@ export function NovaCampanha() {
             id="canal"
             className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
             value={canal}
-            onChange={(e) => setCanal(e.target.value)}
+            onChange={(e) => escolherCanal(e.target.value)}
           >
             <option value="">{t("Escolha um número")}</option>
             {(canais.data ?? []).map((c) => (
@@ -155,7 +197,15 @@ export function NovaCampanha() {
           )}
         </div>
 
-        {(canais.data ?? []).length > 1 && (
+        {usaModelo && (canais.data ?? []).length > 1 && (
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Campanha de modelo aprovado fala só por este número: o modelo é da conta dele, e outro número pode não ter o mesmo modelo.",
+            )}
+          </p>
+        )}
+
+        {!usaModelo && (canais.data ?? []).length > 1 && (
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("Falar também por estes números")}</legend>
             <p className="text-sm text-muted-foreground">
@@ -317,7 +367,13 @@ export function NovaCampanha() {
             variant="outline"
             disabled={!temCriterio || previa.isPending}
             onClick={() =>
-              previa.mutate({ audience_filter: filtro, message_body: texto })
+              previa.mutate({
+                audience_filter: filtro,
+                message_body: corpoDaMensagem,
+                ...(canal ? { channel_session_id: canal } : {}),
+                message_kind: usaModelo ? "template" : "text",
+                ...(usaModelo ? { template_params: modelo.params } : {}),
+              })
             }
           >
             {previa.isPending ? t("Contando…") : t("Ver quantas pessoas")}
@@ -351,35 +407,73 @@ export function NovaCampanha() {
 
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Mensagem")}</h2>
-        <Textarea
-          rows={6}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder={t("Escreva como você falaria com uma pessoa só.")}
-          aria-label={t("Texto da mensagem")}
-        />
-        <div className="space-y-1 text-sm text-muted-foreground">
-          <p>{t("Você pode usar:")}</p>
-          <ul className="space-y-1">
-            {VARIAVEIS_DA_CAMPANHA.map((v) => (
-              <li key={v}>
-                <button
-                  type="button"
-                  className="rounded-md bg-surface-elevated px-1 font-mono text-xs"
-                  onClick={() => setTexto((atual) => `${atual}{{${v}}}`)}
-                >
-                  {`{{${v}}}`}
-                </button>{" "}
-                — {t(DESCRICAO_DA_VARIAVEL[v])}
-              </li>
-            ))}
-          </ul>
-          <p>
-            {t(
-              "Quem não tiver o dado que a mensagem usa fica de fora, com o motivo na lista — mensagem com buraco não sai.",
+        {oficial && (
+          <fieldset className="space-y-2">
+            <legend className="sr-only">{t("Tipo de mensagem")}</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tipo-de-mensagem"
+                value="template"
+                checked={tipo === "template"}
+                onChange={() => setTipo("template")}
+              />
+              {t("Modelo aprovado da Meta — chega a qualquer contato")}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="tipo-de-mensagem"
+                value="text"
+                checked={tipo === "text"}
+                onChange={() => setTipo("text")}
+              />
+              {t("Texto livre — só para quem escreveu para este número nas últimas 24h")}
+            </label>
+          </fieldset>
+        )}
+        {usaModelo ? (
+          <ModeloDaCampanha fonte="oficial" valor={modelo} onChange={setModelo} />
+        ) : (
+          <>
+            <Textarea
+              rows={6}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder={t("Escreva como você falaria com uma pessoa só.")}
+              aria-label={t("Texto da mensagem")}
+            />
+            {oficial && (
+              <p className="text-sm text-warning-fg">
+                {t(
+                  "Quem não escreveu para este número nas últimas 24h fica fora da lista: a Meta recusa texto livre fora dessa janela.",
+                )}
+              </p>
             )}
-          </p>
-        </div>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>{t("Você pode usar:")}</p>
+              <ul className="space-y-1">
+                {VARIAVEIS_DA_CAMPANHA.map((v) => (
+                  <li key={v}>
+                    <button
+                      type="button"
+                      className="rounded-md bg-surface-elevated px-1 font-mono text-xs"
+                      onClick={() => setTexto((atual) => `${atual}{{${v}}}`)}
+                    >
+                      {`{{${v}}}`}
+                    </button>{" "}
+                    — {t(DESCRICAO_DA_VARIAVEL[v])}
+                  </li>
+                ))}
+              </ul>
+              <p>
+                {t(
+                  "Quem não tiver o dado que a mensagem usa fica de fora, com o motivo na lista — mensagem com buraco não sai.",
+                )}
+              </p>
+            </div>
+          </>
+        )}
       </Card>
 
       <Card className="space-y-4 p-4">

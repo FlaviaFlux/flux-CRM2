@@ -80,7 +80,10 @@ export function slotsDoModelo(def: DefinicaoDoModelo): SlotDoModelo[] {
  * mapeamento incompleto tiraria a lista inteira com `variavel_ausente`, e o
  * operador procuraria o defeito nos contatos.
  */
-export function errosDoMapeamento(def: DefinicaoDoModelo, params: Record<string, string>): string[] {
+export function errosDoMapeamento(
+  def: DefinicaoDoModelo,
+  params: Record<string, string>,
+): string[] {
   const slots = slotsDoModelo(def);
   const conhecidas = new Set(slots.map((s) => s.chave));
   const erros: string[] = [];
@@ -97,7 +100,10 @@ export function errosDoMapeamento(def: DefinicaoDoModelo, params: Record<string,
 
 /** O que a Meta aceita num parâmetro de texto: sem quebra de linha, tab nem 4+ espaços seguidos. */
 function parametroAceitavel(valor: string): string {
-  return valor.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+  return valor
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
 }
 
 /**
