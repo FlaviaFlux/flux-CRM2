@@ -168,6 +168,13 @@
       "label": "channel_knobs + channel_sessions.daily_message_limit — fonte única do ritmo do número"
     },
     {
+      "id": "meta-templates",
+      "lane": "dados",
+      "col": 4,
+      "type": "database",
+      "label": "meta_templates — modelos aprovados do número oficial (campanha de modelo, migration 0800)"
+    },
+    {
       "id": "trigger-ack",
       "lane": "retorno",
       "col": 0,
@@ -226,6 +233,9 @@
     { "id": "lgpd-apaga", "from": "lgpd", "to": "campaign-recipients", "label": "anonimizar apaga telefone e texto; o export entrega" },
     { "id": "detalhe-le-metricas", "from": "detalhe", "to": "rota-metricas", "label": "funil, progresso e quem ficou de fora" },
     { "id": "metricas-le-destinatarios", "from": "rota-metricas", "to": "campaign-recipients", "label": "contagem por carimbo, não por status" },
-    { "id": "antiban-edita-knobs", "from": "antiban", "to": "channel-knobs", "label": "o operador ajusta o ritmo do número aqui" }
+    { "id": "antiban-edita-knobs", "from": "antiban", "to": "channel-knobs", "label": "o operador ajusta o ritmo do número aqui" },
+    { "id": "nova-lista-modelos", "from": "nova", "to": "meta-templates", "label": "número oficial: escolhe o modelo APROVADO e a fonte de cada parâmetro" },
+    { "id": "criar-confere-modelo", "from": "rota-criar", "to": "meta-templates", "label": "confere aprovado + deste número + todo parâmetro com fonte" },
+    { "id": "handler-confere-modelo", "from": "send-handler", "to": "meta-templates", "label": "type template: conferirDefinicao antes do envio" }
   ]
 }
