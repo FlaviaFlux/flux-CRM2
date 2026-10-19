@@ -13,6 +13,7 @@ import type { NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { codificarCursor, decodificarCursor, listarDestinatariosSchema } from "@/lib/campanhas/schemas";
+import { motivoDaFalha } from "@/lib/campanhas/erros-da-meta";
 import { TEXTO_DA_EXCLUSAO } from "@/lib/campanhas/tipos";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
@@ -66,7 +67,15 @@ export async function GET(
   const ultima = pagina[pagina.length - 1] as { created_at: string; id: string } | undefined;
 
   return ok(
-    pagina.map((l) => ({ ...l, legenda_da_exclusao: rotulo(l.exclusion_reason) })),
+    pagina.map((l) => ({
+      ...l,
+      legenda_da_exclusao: rotulo(l.exclusion_reason),
+      // "Falharam" com o motivo: o código da Meta (131026, 131049…) vira frase.
+      legenda_da_falha:
+        l.status === "failed" && typeof l.last_error_code === "string"
+          ? motivoDaFalha(l.last_error_code)
+          : null,
+    })),
     {
       requestId,
       meta: { cursor: temMais && ultima ? codificarCursor(ultima) : null, has_more: temMais },
