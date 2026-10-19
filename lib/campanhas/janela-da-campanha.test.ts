@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { CHANNEL_PROVIDER_META, CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
+import { PROVIDERS_DE_MENSAGEM, capabilitiesOf } from "@/lib/channels/capabilities";
+import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 
 import { classificarAudiencia, type CandidatoDaAudiencia } from "./elegibilidade";
 import { campanhaDependeDaJanela, foraDaJanela } from "./janela-da-campanha";
+
+// O provider sai da CAPACIDADE, nunca do nome (doutrina restricao-de-canal):
+// o número oficial é o que tem modelos "oficial"; o QR é o que manda texto livre
+// a qualquer hora.
+const OFICIAL = PROVIDERS_DE_MENSAGEM.find((p) => fonteDeTemplates(p) === "oficial")!;
+const QR = PROVIDERS_DE_MENSAGEM.find((p) => capabilitiesOf(p).freeformOutsideWindow)!;
 
 const AGORA = new Date("2026-10-19T15:00:00Z");
 const HA_2H = new Date(AGORA.getTime() - 2 * 3_600_000).toISOString();
@@ -11,13 +18,13 @@ const HA_3_DIAS = new Date(AGORA.getTime() - 72 * 3_600_000).toISOString();
 
 describe("campanhaDependeDaJanela", () => {
   it("texto no número oficial depende da janela", () => {
-    expect(campanhaDependeDaJanela("text", CHANNEL_PROVIDER_META)).toBe(true);
+    expect(campanhaDependeDaJanela("text", OFICIAL)).toBe(true);
   });
   it("modelo no número oficial NÃO depende — é o que sai fora da janela", () => {
-    expect(campanhaDependeDaJanela("template", CHANNEL_PROVIDER_META)).toBe(false);
+    expect(campanhaDependeDaJanela("template", OFICIAL)).toBe(false);
   });
   it("número QR não tem janela", () => {
-    expect(campanhaDependeDaJanela("text", CHANNEL_PROVIDER_WAHA)).toBe(false);
+    expect(campanhaDependeDaJanela("text", QR)).toBe(false);
   });
   it("provider desconhecido não barra ninguém", () => {
     expect(campanhaDependeDaJanela("text", "provider_do_futuro")).toBe(false);
@@ -25,7 +32,7 @@ describe("campanhaDependeDaJanela", () => {
 });
 
 describe("foraDaJanela", () => {
-  const base = { provider: CHANNEL_PROVIDER_META, agora: AGORA };
+  const base = { provider: OFICIAL, agora: AGORA };
 
   it("texto: quem escreveu há 2h está dentro", () => {
     expect(foraDaJanela({ ...base, tipo: "text", ultimaEntrada: HA_2H })).toBe(false);
@@ -70,7 +77,7 @@ describe("preparação: o veto janela_fechada na classificação", () => {
       janelaFechada: (c) =>
         foraDaJanela({
           tipo,
-          provider: CHANNEL_PROVIDER_META,
+          provider: OFICIAL,
           ultimaEntrada: ultimaEntrada[c.contactId] ?? null,
           agora: AGORA,
         }),

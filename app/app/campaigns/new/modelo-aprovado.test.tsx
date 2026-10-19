@@ -11,7 +11,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NovaCampanha } from "./_client";
 
-const criar = vi.hoisted(() => ({ mutateAsync: vi.fn(async () => ({ id: "nova" })), isPending: false }));
+const criar = vi.hoisted(() => ({
+  mutateAsync: vi.fn(async () => ({ id: "nova" })),
+  isPending: false,
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (chave: string) => chave }));
@@ -19,16 +22,21 @@ vi.mock("@/hooks/campanhas/useCampanhas", () => ({
   useCriarCampanha: () => criar,
   usePreviaDaAudiencia: () => ({ isPending: false, mutate: vi.fn(), data: undefined }),
 }));
-vi.mock("@/hooks/channels/useChannelSessions", () => ({
-  useChannelSessions: () => ({
-    data: [
-      { id: "oficial", provider: "meta_cloud", display_name: "Clube de Campo Umuarama" },
-      { id: "qr", provider: "waha", display_name: "Recepção (QR)" },
-    ],
-    isLoading: false,
-  }),
-  channelLabel: (c: { display_name?: string | null }) => c.display_name ?? "Número sem nome",
-}));
+// O provider sai da CAPACIDADE, nunca do nome (doutrina restricao-de-canal).
+vi.mock("@/hooks/channels/useChannelSessions", async () => {
+  const { PROVIDERS_DE_MENSAGEM, capabilitiesOf } = await import("@/lib/channels/capabilities");
+  const { fonteDeTemplates } = await import("@/lib/channels/templates-fonte");
+  const oficial = PROVIDERS_DE_MENSAGEM.find((p) => fonteDeTemplates(p) === "oficial");
+  const qr = PROVIDERS_DE_MENSAGEM.find((p) => capabilitiesOf(p).freeformOutsideWindow);
+  const canais = [
+    { id: "oficial", provider: oficial, display_name: "Clube de Campo Umuarama" },
+    { id: "qr", provider: qr, display_name: "Recepção (QR)" },
+  ];
+  return {
+    useChannelSessions: () => ({ data: canais, isLoading: false }),
+    channelLabel: (c: { display_name?: string | null }) => c.display_name ?? "Número sem nome",
+  };
+});
 vi.mock("@/hooks/campanhas/useDestinoDaCampanha", () => ({
   useFunis: () => ({ data: [], isLoading: false }),
   useEtapas: () => ({ data: [], isLoading: false }),
@@ -55,7 +63,13 @@ const MODELOS = [
     category: "MARKETING",
     components: [{ type: "BODY", text: "Promoção de verão!" }],
   },
-  { name: "ainda_em_analise", language: "pt_BR", status: "PENDING", category: "UTILITY", components: [] },
+  {
+    name: "ainda_em_analise",
+    language: "pt_BR",
+    status: "PENDING",
+    category: "UTILITY",
+    components: [],
+  },
 ];
 
 vi.mock("@/lib/api/client", () => ({
@@ -68,8 +82,12 @@ function comConsulta(ui: ReactNode) {
 }
 
 function preencherBasico() {
-  fireEvent.change(screen.getByLabelText("Nome da campanha"), { target: { value: "Plano diretor" } });
-  fireEvent.change(screen.getByLabelText("Com alguma destas etiquetas"), { target: { value: "teste" } });
+  fireEvent.change(screen.getByLabelText("Nome da campanha"), {
+    target: { value: "Plano diretor" },
+  });
+  fireEvent.change(screen.getByLabelText("Com alguma destas etiquetas"), {
+    target: { value: "teste" },
+  });
 }
 
 describe("nova campanha por número oficial: modelo aprovado", () => {
