@@ -85,12 +85,22 @@ CRONS="
 # antes em avisar entre 30 e 45 minutos antes. Barato: só olha compromisso
 # confirmado, futuro e ainda não avisado.
 */5 * * * *|45|api/v1/cron/agenda-reminder
+# O LEMBRETE DE TAREFA. A cada 5 minutos porque a antecedência é escolhida
+# pela PESSOA (15 min, 1 h que é o padrão, ou 1 dia): uma varredura mais lenta
+# transformaria avisar 15 minutos antes em avisar até 20. Barato: só tarefa
+# com prazo na janela, com responsável, e que ainda não virou item da Central.
+*/5 * * * *|45|api/v1/cron/task-reminder
 */15 * * * *|45|api/v1/cron/agenda-expira-pendentes
 */15 * * * *|60|api/v1/cron/risk-watcher
 # O CASO PARADO. De hora em hora, e não a cada 5 minutos: o prazo é de 24h, e
 # uma varredura mais frequente só gastaria consulta para descobrir o mesmo nada.
 7 * * * *|60|api/v1/cron/case-stale-watcher
 */30 * * * *|60|api/v1/cron/contact-phones
+# O NOME DA AGENDA. O webhook não traz o nome salvo no celular; esta varredura
+# pergunta ao canal e preenche a ficha. Dez em dez minutos porque quem acabou
+# de conectar o número está olhando a inbox agora. Lote de 5 e prazo de 45 s
+# dentro da rota: o pior caso cabe nos 60 s com folga.
+*/10 * * * *|60|api/v1/cron/contact-names
 17 * * * *|60|api/v1/cron/contact-proposals-watcher
 23 * * * *|60|api/v1/cron/followup-sem-agente
 # O ANIVERSÁRIO. De hora em hora, e não uma vez ao dia, porque quem decide o
