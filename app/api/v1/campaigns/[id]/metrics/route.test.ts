@@ -12,6 +12,7 @@ import { NextRequest } from "next/server";
 
 import { requireRole } from "@/lib/auth/require-role";
 import type { AuthUser } from "@/lib/auth/types";
+import type { ContagemDaCampanha } from "@/lib/campanhas/metricas";
 import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -103,7 +104,7 @@ describe("GET /api/v1/campaigns/:id/metrics", () => {
     vi.mocked(createClient).mockResolvedValue(client as never);
 
     const data = await chamar();
-    const c = data.contagem as Record<string, number>;
+    const c = data.contagem as ContagemDaCampanha;
 
     expect(c.total).toBe(1485);
     expect(c.elegiveis).toBe(1485);
