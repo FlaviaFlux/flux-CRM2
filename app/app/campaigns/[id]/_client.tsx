@@ -202,7 +202,12 @@ export function DetalheDaCampanha({ id }: { id: string }) {
             />
           </div>
           <p className="text-sm text-muted-foreground">
-            {m.contagem.pendentes} {t("ainda não enviadas")} · {m.contagem.falharam} {t("falharam")} ·{" "}
+            {m.contagem.pendentes} {t("ainda não enviadas")} ·{" "}
+            {/* Quem já saiu de "pendente" e ainda não foi enviado. Sem esta
+                parcela, a soma da linha não fecha com a lista. */}
+            {m.contagem.naFila + m.contagem.enviando > 0 &&
+              `${m.contagem.naFila + m.contagem.enviando} ${t("na fila")} · `}
+            {m.contagem.falharam} {t("falharam")} ·{" "}
             {m.contagem.optOut} {t("pediram para parar")}
           </p>
         </Card>
