@@ -400,3 +400,41 @@ describe("MessageBubble — remetente de grupo", () => {
     expect(screen.queryByText("Maria · +5521999990000")).toBeNull();
   });
 });
+
+/**
+ * Modelo aprovado com botão: o `body` guarda só cabeçalho e corpo, e o rodapé
+ * e os botões vêm de `metadata.modelo` (`lib/messaging/modelo-da-mensagem.ts`).
+ * Sem isto, a campanha com botão de link aparecia na conversa sem o botão que
+ * o cliente recebeu.
+ */
+describe("MessageBubble — botões do modelo", () => {
+  const modelo = {
+    rodape: "Clube de Campo Umuarama",
+    botoes: [
+      { tipo: "URL", texto: "Responder pesquisa", url: "https://exemplo.com/p/abc", telefone: null },
+      { tipo: "QUICK_REPLY", texto: "Não quero", url: null, telefone: null },
+      { tipo: "URL", texto: "Perigoso", url: "javascript:alert(1)", telefone: null },
+    ],
+  };
+
+  it("mostra rodapé, e o botão de link abre a URL em outra aba", () => {
+    render(<MessageBubble message={msg({ metadata: { modelo } })} />);
+    expect(screen.getByText("Clube de Campo Umuarama")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Responder pesquisa/ });
+    expect(link).toHaveAttribute("href", "https://exemplo.com/p/abc");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("resposta rápida e link não http viram rótulo, não link", () => {
+    render(<MessageBubble message={msg({ metadata: { modelo } })} />);
+    expect(screen.getByText("Não quero")).toBeInTheDocument();
+    expect(screen.getByText("Perigoso")).toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("mensagem sem modelo não desenha a área de botões", () => {
+    render(<MessageBubble message={msg()} />);
+    expect(screen.queryByTestId("modelo-da-mensagem")).toBeNull();
+  });
+});

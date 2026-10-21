@@ -3,7 +3,7 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, CaretDown, Check, Checks, PencilSimple, Robot, Trash, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, ArrowSquareOut, CaretDown, Check, Checks, PencilSimple, Phone, Robot, Trash, WarningOctagon } from "@/lib/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -25,6 +25,7 @@ import { localizacaoDaMensagem } from "@/lib/messaging/localizacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 import { lerAnuncioDaMensagem } from "@/lib/leads/atribuicao-de-anuncio";
 import { AnuncioCard } from "@/components/inbox/AnuncioCard";
+import { lerModeloDaMensagem, linkSeguro, type ModeloDaMensagem } from "@/lib/messaging/modelo-da-mensagem";
 import {
   extractCitations,
   isAiGeneratedMessage,
@@ -55,6 +56,56 @@ interface Props {
   onApagar?: () => Promise<void>;
   onOcultar?: () => Promise<void>;
   onRestaurar?: () => Promise<void>;
+}
+
+/**
+ * Rodapé e botões como o WhatsApp os desenha: rodapé miúdo sob o texto, cada
+ * botão numa faixa própria separada por uma linha. Botão de link abre a URL
+ * (só http/https); resposta rápida e telefone são só rótulo, porque quem clica
+ * neles é o cliente, não o atendente.
+ */
+function RodapeEBotoesDoModelo({ modelo }: { modelo: ModeloDaMensagem }) {
+  return (
+    <div data-testid="modelo-da-mensagem">
+      {modelo.rodape && (
+        <p className="mt-1 whitespace-pre-wrap wrap-anywhere text-[11px] leading-snug opacity-70">
+          {modelo.rodape}
+        </p>
+      )}
+      {modelo.botoes.length > 0 && (
+        <div className="-mx-3 mt-2 border-t border-current/20">
+          {modelo.botoes.map((botao, i) => {
+            const link = botao.tipo.toUpperCase() === "URL" ? linkSeguro(botao.url) : null;
+            const Icone = link ? ArrowSquareOut : botao.telefone ? Phone : ArrowBendUpLeft;
+            const conteudo = (
+              <>
+                <Icone size={14} aria-hidden />
+                <span className="truncate">{botao.texto}</span>
+              </>
+            );
+            const classe =
+              "flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium [&:not(:first-child)]:border-t [&:not(:first-child)]:border-current/20";
+            return link ? (
+              <a
+                key={i}
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(classe, "hover:underline")}
+                title={link}
+              >
+                {conteudo}
+              </a>
+            ) : (
+              <div key={i} className={classe}>
+                {conteudo}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
@@ -211,6 +262,8 @@ export function MessageBubble({
   // a mensagem nascida de um clique). Só na recebida: é o cliente que chega
   // pelo anúncio, como o WhatsApp mostra no celular.
   const anuncio = !isOutbound ? lerAnuncioDaMensagem(message.metadata?.anuncio) : null;
+  // Rodapé e botões do modelo aprovado: o `body` guarda só cabeçalho e corpo.
+  const modelo = isOutbound ? lerModeloDaMensagem(message.metadata) : null;
 
   async function salvarEdicao() {
     const novoTexto = texto.trim();
@@ -430,6 +483,8 @@ export function MessageBubble({
             {message.body && !isContact && !localizacao && (
               <p className="whitespace-pre-wrap wrap-anywhere leading-snug">{message.body}</p>
             )}
+
+            {modelo && <RodapeEBotoesDoModelo modelo={modelo} />}
           </>
         )}
 

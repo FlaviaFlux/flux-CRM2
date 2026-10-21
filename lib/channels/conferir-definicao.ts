@@ -56,9 +56,18 @@ export interface PedidoDeDefinicao {
   values: Record<string, string>;
 }
 
+/** A definição conferida — quem envia guarda dela a foto de rodapé e botões. */
+export interface DefinicaoConferida {
+  name: string;
+  language: string;
+  components: unknown;
+  parameter_format?: string;
+}
+
 /**
  * Lança com uma frase acionável quando a definição não serve. Silêncio é
- * aprovação.
+ * aprovação, e devolve a definição conferida (`null` quando não há o que
+ * devolver: falha de leitura ou modelo não espelhado).
  *
  * NÃO lança quando a definição simplesmente não está espelhada: um espelho
  * vazio (sync nunca rodou) barraria todo envio de modelo numa instalação que
@@ -68,7 +77,7 @@ export interface PedidoDeDefinicao {
 export async function conferirDefinicao(
   db: SupabaseClient,
   pedido: PedidoDeDefinicao,
-): Promise<void> {
+): Promise<DefinicaoConferida | null> {
   if (!pedido.name || !pedido.language) {
     throw new Error("template_incompleto: nome e idioma são obrigatórios em type=template");
   }
@@ -84,7 +93,7 @@ export async function conferirDefinicao(
 
   // Falha de leitura não é definição inválida. Barrar aqui trocaria um envio
   // que ia dar certo por um erro nosso.
-  if (error) return;
+  if (error) return null;
 
   const linha = data as {
     name: string;
@@ -96,7 +105,7 @@ export async function conferirDefinicao(
   } | null;
 
   // Não espelhada: deixa passar. Ver o cabeçalho.
-  if (!linha) return;
+  if (!linha) return null;
 
   const estado = bindingState(
     {
@@ -136,4 +145,11 @@ export async function conferirDefinicao(
       `template_missing_values: "${pedido.name}" espera ${faltando.length} valor(es) — falta: ${nomes}`,
     );
   }
+
+  return {
+    name: linha.name,
+    language: linha.language,
+    components: linha.components,
+    ...(linha.parameter_format ? { parameter_format: linha.parameter_format } : {}),
+  };
 }

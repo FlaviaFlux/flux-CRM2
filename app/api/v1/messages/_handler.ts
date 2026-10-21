@@ -56,6 +56,7 @@ import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { emitirFalhaDeEntrega } from "@/lib/messaging/falha-de-entrega";
 import { previaDaMensagem } from "@/lib/messaging/previa-da-mensagem";
+import { fotoDoModelo, type ModeloDaMensagem } from "@/lib/messaging/modelo-da-mensagem";
 import { aplicarAssinatura, configAssinatura, linhaDeAssinatura } from "@/lib/messaging/assinatura";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
@@ -1030,6 +1031,8 @@ export async function sendMessageHandler(
       // adapter preserva o mesmo branch (e a mesma mensagem de erro de cada
       // método) do outro lado do seam.
       let externalId: string | null;
+      // Rodapé e botões do modelo, para o balão (`lib/messaging/modelo-da-mensagem.ts`).
+      let fotoDoEnvio: ModeloDaMensagem | null = null;
       if (input.type === "template") {
         // Template é caminho próprio: não passa pelo `adapter.send` (que fala em
         // texto/mídia) porque o payload da plataforma é outro — e porque o envio
@@ -1053,7 +1056,7 @@ export async function sendMessageHandler(
         // característica do transporte. O caminho de baixo já conferia; o
         // adapter postava direto, e um parâmetro a mais virava `400` cru em vez
         // de "falta o valor {{2}}".
-        await conferirDefinicao(supabase, {
+        const definicao = await conferirDefinicao(supabase, {
           organizationId: ctx.organization_id,
           // A conexão dona da definição: dois números têm modelos diferentes, e
           // conferir a do número errado aprovaria um envio que a plataforma
@@ -1063,6 +1066,8 @@ export async function sendMessageHandler(
           language: input.template_language ?? "",
           values: input.template_values ?? {},
         });
+        // Sem definição espelhada não há foto: o balão mostra só o texto, como antes.
+        fotoDoEnvio = definicao ? fotoDoModelo(definicao, input.template_values ?? {}) : null;
 
         await checkBoundary();
         externalId = adapter.sendTemplate
@@ -1240,6 +1245,7 @@ export async function sendMessageHandler(
             ...(input.type === "template"
               ? { template_name: input.template_name, template_language: input.template_language }
               : {}),
+            ...(fotoDoEnvio ? { metadata: { ...(message.metadata ?? {}), modelo: fotoDoEnvio } } : {}),
           })
           .eq("id", message.id)
           .select(MSG_COLS)

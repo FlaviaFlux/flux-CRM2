@@ -626,4 +626,43 @@ describe("o MODELO do canal oficial sai pela credencial da sessão, não pelo .e
       template: { name: "boas_vindas", language: { code: "pt_BR" } },
     });
   });
+
+  it("rodapé e botões do modelo ficam gravados na mensagem, com o sufixo deste envio", async () => {
+    // A conversa mostrava só cabeçalho e corpo: o botão de link que o cliente
+    // recebeu não existia no CRM. A foto sai da definição que o pré-voo leu.
+    credencialDaSessao.porOrg = {
+      [`${ORG}|${NUMERO_DA_SESSAO}`]: { cifrado: "\\xsessao", token: "tok-da-sessao" },
+    };
+    vi.stubGlobal("fetch", respostaMeta("wamid.BOTAO"));
+    const comBotao: Row = {
+      ...espelho,
+      components: [
+        { type: "BODY", text: "Olá, {{1}}! A pesquisa está aberta." },
+        { type: "FOOTER", text: "Clube de Campo" },
+        {
+          type: "BUTTONS",
+          buttons: [{ type: "URL", text: "Responder", url: "https://exemplo.com/p/{{1}}" }],
+        },
+      ],
+    };
+
+    const { supabase } = dubleDe(conversaCompleta({ provider: "meta_cloud" }), comBotao);
+    const msg = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({
+        type: "template",
+        body: undefined,
+        template_name: "boas_vindas",
+        template_language: "pt_BR",
+        template_values: { "1": "Ana", "button0:1": "abc" },
+      }),
+    );
+
+    expect(msg.status).toBe("sent");
+    expect((msg.metadata as Record<string, unknown>).modelo).toEqual({
+      rodape: "Clube de Campo",
+      botoes: [{ tipo: "URL", texto: "Responder", url: "https://exemplo.com/p/abc", telefone: null }],
+    });
+  });
 });

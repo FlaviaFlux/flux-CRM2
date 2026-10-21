@@ -223,20 +223,26 @@ describe("o pré-voo da definição", () => {
     // A chave do corpo NÃO tem prefixo — `slotKey` só prefixa header, botão e
     // card. Errar isto do lado de quem envia faz o pré-voo recusar um envio
     // completo, então o formato exato importa e está fixado aqui.
-    await expect(conferir({ "1": "Marcela" })).resolves.toBeUndefined();
+    // Passar devolve a definição conferida: é dela que o envio tira a foto de
+    // rodapé e botões (`lib/messaging/modelo-da-mensagem.ts`).
+    await expect(conferir({ "1": "Marcela" })).resolves.toEqual({
+      name: "boas_vindas",
+      language: "pt_BR",
+      components: [{ type: "BODY", text: "Olá {{1}}." }],
+    });
   });
 
   it("definição NÃO espelhada passa — o provedor é a autoridade, não o espelho", async () => {
     // Um espelho vazio (sync nunca rodou) barraria todo envio de modelo numa
     // instalação que está com tudo certo do lado da plataforma.
     linhaTemplate = null;
-    await expect(conferir()).resolves.toBeUndefined();
+    await expect(conferir()).resolves.toBeNull();
   });
 
   it("falha de LEITURA não vira recusa de envio", async () => {
     // Barrar aqui trocaria um envio que ia dar certo por um erro nosso.
     erroSelect = { message: "banco fora" };
-    await expect(conferir()).resolves.toBeUndefined();
+    await expect(conferir()).resolves.toBeNull();
   });
 
   it("exige nome e idioma", async () => {
