@@ -629,6 +629,7 @@ jobs:
       # MEDIDA no run 37483721555 (SHA bdc8f2ae9, 06/10/2026): 1,2 min de caso;
       # SUITE_SEGUNDOS da parte 1 = 853.
       SPECS_PARTE_1: >-
+        banco-externo-receitas.spec.ts
         conversoes-reprocessamento.spec.ts
         pre-go-live-whatsapp.spec.ts
         smoke.spec.ts auth.spec.ts error-pages.spec.ts
@@ -649,6 +650,7 @@ jobs:
         wizard-do-funcionario.spec.ts mfa-opcional.spec.ts inbox-responder-citando.spec.ts
         agenda-tela-do-produto.spec.ts
         notificacoes-diz-o-que-falta.spec.ts
+        notificacoes-tela-bloqueada.spec.ts
         cobranca-asaas.spec.ts
         relogio-http-cron-externo.spec.ts
         j20-elegibilidade-respondi.spec.ts j20-elegibilidade-followup.spec.ts
@@ -661,6 +663,7 @@ jobs:
         canal-mudo-avisa-na-central.spec.ts
         qa-l12-troca-de-funil.spec.ts
         qa-l12-agente-ia.spec.ts
+        prospeccao-auditoria-do-site.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
       # ordena os arquivos por CAMINHO, não pela ordem em que são passados na
       # linha de comando. Medido no run 31838253496: `marca-logo.spec.ts` estava
@@ -988,6 +991,7 @@ jobs:
         whatsapp-pareamento-por-codigo.spec.ts
         central-avisos-destino.spec.ts
         agenda-google-sync.spec.ts
+        agenda-servicos.spec.ts
         encerramento-atendimento.spec.ts
         passagem-com-contexto.spec.ts
         interface-por-vinculo.spec.ts
@@ -1029,6 +1033,7 @@ jobs:
         fotos-no-catalogo.spec.ts
         catalogo-busca-no-catalogo-inteiro.spec.ts
         relatorio-por-etiqueta.spec.ts
+        integracao-dados-mysql-na-tela.spec.ts
 
       # ─── PARTE 4 — a spec de VPS fresca, e quem pode entrar ao lado dela ───
       #
@@ -1259,6 +1264,7 @@ jobs:
       SPECS_PARTE_6: >-
         agenda-google-meet.spec.ts
         agenda-presenca-recuperacao.spec.ts
+        app-no-celular.spec.ts
         celular-cabe-na-tela.spec.ts
         cobranca-desligada.spec.ts
         cobranca-link-pelo-dono.spec.ts
