@@ -171,7 +171,7 @@ function CreateOrMoveLeadForm({
         >
           <SelectTrigger>
             <SelectValue
-              placeholder={config.pipeline_id ? "Escolha a etapa" : "Escolha o funil primeiro"}
+              placeholder={config.pipeline_id ? t("Escolha a etapa") : t("Escolha o funil primeiro")}
             />
           </SelectTrigger>
           <SelectContent>
@@ -187,6 +187,9 @@ function CreateOrMoveLeadForm({
   );
 }
 
+// O rótulo de cada variável é chave do dicionário e passa por t() onde vira botão: escrito cru, ele saía em
+// português em todo idioma. Só estas três: os campos do formulário que vêm junto são rótulos que a pessoa escreveu,
+// e dado não se traduz.
 const TEMPLATE_VARS = [
   { token: "{{nome}}", label: "Nome" },
   { token: "{{telefone}}", label: "Telefone" },
@@ -237,7 +240,7 @@ function SendWhatsappForm({
           <SelectContent>
             {(sessions ?? []).map((s) => (
               <SelectItem key={s.id} value={s.id} disabled={s.status !== "WORKING"}>
-                {channelLabel(s) + (s.status !== "WORKING" ? " — desconectado" : "")}
+                {channelLabel(s) + (s.status !== "WORKING" ? t(" — desconectado") : "")}
               </SelectItem>
             ))}
           </SelectContent>
@@ -251,7 +254,7 @@ function SendWhatsappForm({
       <div className="space-y-1">
         <Label>{t("Mensagem")}</Label>
         <div className="flex flex-wrap gap-1">
-          {[...TEMPLATE_VARS, ...camposDoFormulario].map((v) => (
+          {[...TEMPLATE_VARS.map((v) => ({ ...v, label: t(v.label) })), ...camposDoFormulario].map((v) => (
             <Button
               key={v.token}
               type="button"
@@ -268,7 +271,7 @@ function SendWhatsappForm({
           rows={4}
           value={config.template}
           onChange={(e) => onChange({ ...config, template: e.target.value })}
-          placeholder="Oi {{nome}}, tudo bem?"
+          placeholder={t("Oi {{nome}}, tudo bem?")}
         />
         <p className="text-xs text-muted-foreground">
           {/* NÃO cravar "7h e 22h": a janela passou a vir dos ajustes DO NÚMERO
@@ -382,7 +385,7 @@ function SendEmailForm({
       <div className="space-y-1">
         <Label>{t("Corpo do e-mail")}</Label>
         <div className="flex flex-wrap gap-1">
-          {[...TEMPLATE_VARS, ...camposDoFormulario].map((v) => (
+          {[...TEMPLATE_VARS.map((v) => ({ ...v, label: t(v.label) })), ...camposDoFormulario].map((v) => (
             <Button
               key={v.token}
               type="button"
@@ -399,7 +402,7 @@ function SendEmailForm({
           rows={5}
           value={config.corpo}
           onChange={(e) => onChange({ ...config, corpo: e.target.value })}
-          placeholder="Oi {{nome}}, tudo bem?"
+          placeholder={t("Oi {{nome}}, tudo bem?")}
         />
       </div>
       <div className="space-y-1">
@@ -487,7 +490,7 @@ function SendAiMessageForm({
           <SelectContent>
             {(sessions ?? []).map((s) => (
               <SelectItem key={s.id} value={s.id} disabled={s.status !== "WORKING"}>
-                {channelLabel(s) + (s.status !== "WORKING" ? " — desconectado" : "")}
+                {channelLabel(s) + (s.status !== "WORKING" ? t(" — desconectado") : "")}
               </SelectItem>
             ))}
           </SelectContent>
@@ -502,10 +505,9 @@ function SendAiMessageForm({
           maxLength={1000}
           value={config.instruction}
           onChange={(e) => onChange({ ...config, instruction: e.target.value })}
-          placeholder={
-            "Ex.: Agradeça o interesse citando o segmento que a pessoa informou, mostre em uma frase " +
-            "como a gente resolve a dificuldade que ela descreveu, e pergunte qual o melhor horário para conversar."
-          }
+          placeholder={t(
+            "Ex.: Agradeça o interesse citando o segmento que a pessoa informou, mostre em uma frase como a gente resolve a dificuldade que ela descreveu, e pergunte qual o melhor horário para conversar.",
+          )}
         />
         <p className="text-xs text-muted-foreground">
           {t("O agente já sabe que é a PRIMEIRA mensagem, logo depois de a pessoa preencher o formulário, e recebe todos os campos que ela respondeu. Aqui você diz o que fazer com eles — quanto mais concreto, melhor a mensagem.")}
@@ -546,7 +548,7 @@ function AddTagForm({
             // aqui apagaria a metade da tela que o operador acabou de preencher.
             onChange({ ...config, tags });
           }}
-          placeholder="boas-vindas, novo-lead"
+          placeholder={t("boas-vindas, novo-lead")}
         />
       </div>
       <div className="space-y-1">
@@ -846,7 +848,7 @@ function CallWebhookForm({
         />
       </div>
       <div className="space-y-1">
-        <Label>Segredo (opcional)</Label>
+        <Label>{t("Segredo (opcional)")}</Label>
         <Input
           type="password"
           value={config.secret ?? ""}
@@ -856,7 +858,7 @@ function CallWebhookForm({
             const { secret_enc: _enc, ...rest } = config;
             onChange(next ? { ...rest, secret: next } : { ...rest, secret: undefined });
           }}
-          placeholder={hasStoredSecret ? "•••••••• (definido — digite para trocar)" : "uma senha só sua"}
+          placeholder={hasStoredSecret ? t("•••••••• (definido — digite para trocar)") : t("uma senha só sua")}
         />
         <p className="text-xs text-muted-foreground">
           {hasStoredSecret
