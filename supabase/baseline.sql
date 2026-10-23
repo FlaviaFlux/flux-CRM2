@@ -36563,24 +36563,9 @@ grant all on public.campaigns to service_role;
 alter table public.campaign_recipients enable row level security;
 
 drop policy if exists tenant_isolation_campaign_recipients_all on public.campaign_recipients;
-drop policy if exists campaign_recipients_select on public.campaign_recipients;
-create policy campaign_recipients_select on public.campaign_recipients
-  for select using (
-    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
-  );
-
-drop policy if exists campaign_recipients_write on public.campaign_recipients;
-create policy campaign_recipients_write on public.campaign_recipients
-  using (
-    public.fn_is_platform_admin_full()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'manager'))
-  )
-  with check (
-    public.fn_is_platform_admin_full()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'manager'))
-  );
+-- As policies desta tabela moram no bloco da migration 0801, mais abaixo: a
+-- versão `for all` que estava aqui era reinstalada a cada update e valia até a
+-- final chegar (`baseline-nao-constroi-o-que-derruba`).
 
 revoke all on public.campaign_recipients from anon, authenticated;
 grant select on public.campaign_recipients to authenticated;
@@ -36626,6 +36611,52 @@ comment on column public.campaigns.message_kind is
   'O que a campanha envia: `text` (message_body, texto livre) ou `template` (modelo aprovado da Meta, para número da API oficial). Vocabulário em lib/campanhas/tipos.ts → TIPOS_DE_MENSAGEM.';
 comment on column public.campaigns.template_params is
   'Valor de cada parâmetro do modelo, chaveado por slotKey (lib/channels/meta/build-components.ts). O valor é texto com as variáveis da campanha ({{primeiro_nome}}, {{nome}}, {{saudacao}}, {{lead.x}}, {{contato.x}}) ou texto fixo, resolvido por contato na preparação e no envio.';
+
+-- ---- leitura de destinatários sem a regra de escrita (migration 0801, distribuição Flux) ----
+-- A ESCRITA é `insert`/`update`/`delete`, NUNCA `for all`: `for all` vale também
+-- para SELECT, e o OR das permissivas fazia toda leitura avaliar
+-- `fn_role_at_least` (security definer, que chama `fn_support_context`) em cada
+-- destinatário — ~8 ms por linha, e a tela da campanha estourava o
+-- statement_timeout de 8 s. Chamada que não depende da linha vai em `(select …)`:
+-- o planner a executa uma vez. Idempotente: `drop policy if exists` antes de cada
+-- `create policy`.
+drop policy if exists campaign_recipients_select on public.campaign_recipients;
+create policy campaign_recipients_select on public.campaign_recipients
+  for select using (
+    (organization_id in (select public.fn_user_org_ids())) or (select public.fn_is_platform_admin())
+  );
+
+drop policy if exists campaign_recipients_write on public.campaign_recipients;
+
+drop policy if exists campaign_recipients_insert on public.campaign_recipients;
+create policy campaign_recipients_insert on public.campaign_recipients
+  for insert with check (
+    (select public.fn_is_platform_admin_full())
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+-- O nome `_write` fica com o UPDATE: é por ele que a 0533 e o invariante
+-- `platform-admin-full-so-escreve` conferem a expressão da escrita.
+create policy campaign_recipients_write on public.campaign_recipients
+  for update using (
+    (select public.fn_is_platform_admin_full())
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  )
+  with check (
+    (select public.fn_is_platform_admin_full())
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
+
+drop policy if exists campaign_recipients_delete on public.campaign_recipients;
+create policy campaign_recipients_delete on public.campaign_recipients
+  for delete using (
+    (select public.fn_is_platform_admin_full())
+    or ((organization_id in (select public.fn_user_org_ids()))
+        and public.fn_role_at_least(organization_id, 'manager'))
+  );
 
 -- ---- templates e lista de exclusão de campanha (migration 0376) ----
 -- 0376 — TEMPLATES E LISTA DE EXCLUSÃO DE CAMPANHA (Spec 12 §2.3 e §2.4)
