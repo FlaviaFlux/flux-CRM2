@@ -36563,24 +36563,9 @@ grant all on public.campaigns to service_role;
 alter table public.campaign_recipients enable row level security;
 
 drop policy if exists tenant_isolation_campaign_recipients_all on public.campaign_recipients;
-drop policy if exists campaign_recipients_select on public.campaign_recipients;
-create policy campaign_recipients_select on public.campaign_recipients
-  for select using (
-    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
-  );
-
-drop policy if exists campaign_recipients_write on public.campaign_recipients;
-create policy campaign_recipients_write on public.campaign_recipients
-  using (
-    public.fn_is_platform_admin_full()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'manager'))
-  )
-  with check (
-    public.fn_is_platform_admin_full()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'manager'))
-  );
+-- As policies desta tabela moram no bloco da migration 0801, mais abaixo: a
+-- versão `for all` que estava aqui era reinstalada a cada update e valia até a
+-- final chegar (`baseline-nao-constroi-o-que-derruba`).
 
 revoke all on public.campaign_recipients from anon, authenticated;
 grant select on public.campaign_recipients to authenticated;
