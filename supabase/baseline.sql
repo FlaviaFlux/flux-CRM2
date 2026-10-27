@@ -5427,11 +5427,11 @@ revoke execute on function public.fn_can_view_conversation(uuid, uuid) from anon
 grant execute on function public.fn_can_view_conversation(uuid, uuid)
   to authenticated, service_role;
 
-drop policy if exists "conversations_select" on public.conversations;
-create policy "conversations_select" on public.conversations
-  for select using (
-    public.fn_can_view_conversation(organization_id, assigned_to_user_id)
-  );
+-- `conversations_select` mora no bloco da migration 0802, mais abaixo: a versão
+-- por linha (`fn_can_view_conversation`) que estava aqui era reinstalada a cada
+-- update e valia até a final chegar (`baseline-nao-constroi-o-que-derruba`).
+-- Sem o `drop` aqui também: no update, a policy anterior segue de pé até o
+-- bloco da 0802 trocá-la, sem janela em que a tabela fique sem leitura.
 
 drop policy if exists "conversations_agent_write" on public.conversations;
 drop policy if exists "conversations_agent_insert" on public.conversations;
