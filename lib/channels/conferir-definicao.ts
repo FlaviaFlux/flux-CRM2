@@ -38,7 +38,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { linhaDoEspelho } from "./linha-do-espelho";
 import { missingSlots } from "./meta/build-components";
 import { bindingState } from "./meta/template-binding";
-import { deriveTemplateContract } from "./meta/template-contract";
+import { deriveTemplateContract, type TemplateContract } from "./meta/template-contract";
 
 export interface PedidoDeDefinicao {
   organizationId: string;
@@ -56,28 +56,26 @@ export interface PedidoDeDefinicao {
   values: Record<string, string>;
 }
 
-/** A definição conferida — quem envia guarda dela a foto de rodapé e botões. */
-export interface DefinicaoConferida {
-  name: string;
-  language: string;
-  components: unknown;
-  parameter_format?: string;
-}
+/** O contrato conferido e os componentes da definição de onde ele saiu. */
+export type ContratoConferido = TemplateContract & { components: unknown };
 
 /**
  * Lança com uma frase acionável quando a definição não serve. Silêncio é
- * aprovação, e devolve a definição conferida (`null` quando não há o que
- * devolver: falha de leitura ou modelo não espelhado).
+ * aprovação.
  *
  * NÃO lança quando a definição simplesmente não está espelhada: um espelho
  * vazio (sync nunca rodou) barraria todo envio de modelo numa instalação que
  * está com tudo certo do lado da plataforma. Recusar o que não se sabe é pior
  * que deixar o provedor responder — ele é a autoridade, não este espelho.
+ *
+ * Devolve o CONTRATO conferido (ou `null` quando não há o que conferir): o
+ * transporte que precisa ordenar os valores — modelo nomeado, variável do
+ * cabeçalho, sufixo de link de botão — lê a ordem dele, e não de novo do banco.
  */
 export async function conferirDefinicao(
   db: SupabaseClient,
   pedido: PedidoDeDefinicao,
-): Promise<DefinicaoConferida | null> {
+): Promise<ContratoConferido | null> {
   if (!pedido.name || !pedido.language) {
     throw new Error("template_incompleto: nome e idioma são obrigatórios em type=template");
   }
@@ -145,11 +143,7 @@ export async function conferirDefinicao(
       `template_missing_values: "${pedido.name}" espera ${faltando.length} valor(es) — falta: ${nomes}`,
     );
   }
-
-  return {
-    name: linha.name,
-    language: linha.language,
-    components: linha.components,
-    ...(linha.parameter_format ? { parameter_format: linha.parameter_format } : {}),
-  };
+  // Os componentes vão junto: quem envia guarda deles a foto de rodapé e
+  // botões (`lib/messaging/modelo-da-mensagem.ts`, distribuição Flux).
+  return { ...contrato, components: linha.components };
 }

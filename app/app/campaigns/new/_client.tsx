@@ -23,22 +23,22 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useCriarCampanha, usePreviaDaAudiencia } from "@/hooks/campanhas/useCampanhas";
+import {
+  useCriarCampanha,
+  useModelosDaCampanha,
+  usePreviaDaAudiencia,
+} from "@/hooks/campanhas/useCampanhas";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useT } from "@/hooks/i18n/useT";
-import {
-  useAgentesPublicados,
-  useEtapas,
-  useFunis,
-} from "@/hooks/campanhas/useDestinoDaCampanha";
+import { useAgentesPublicados, useEtapas, useFunis } from "@/hooks/campanhas/useDestinoDaCampanha";
+import { VARIAVEIS_DA_CAMPANHA, DESCRICAO_DA_VARIAVEL } from "@/lib/campanhas/renderizador";
+
 import {
   ModeloDaCampanha,
-  resumirModelo,
-  useModelosAprovados,
+  variaveisIncompletas,
   type EscolhaDoModelo,
-} from "@/components/campanhas/ModeloDaCampanha";
-import { VARIAVEIS_DA_CAMPANHA, DESCRICAO_DA_VARIAVEL } from "@/lib/campanhas/renderizador";
-import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
+} from "../_components/ModeloDaCampanha";
+import { VelocidadeDaCampanha, type Velocidade } from "../_components/VelocidadeDaCampanha";
 
 export function NovaCampanha() {
   const t = useT();
@@ -46,8 +46,6 @@ export function NovaCampanha() {
   const canais = useChannelSessions();
   const criar = useCriarCampanha();
   const previa = usePreviaDaAudiencia();
-  const [tipo, setTipo] = useState<"text" | "template">("text");
-  const [modelo, setModelo] = useState<EscolhaDoModelo>({ nome: "", idioma: "", params: {} });
 
   const [nome, setNome] = useState("");
   const [canal, setCanal] = useState("");
@@ -69,6 +67,26 @@ export function NovaCampanha() {
   const [agente, setAgente] = useState("");
   const [funilDoPublico, setFunilDoPublico] = useState("");
   const [etapaDoPublico, setEtapaDoPublico] = useState("");
+  const [modelo, setModelo] = useState<EscolhaDoModelo | null>(null);
+  const [velocidade, setVelocidade] = useState<Velocidade>("gradual");
+
+  // O que o número escolhido aceita: texto livre (QR) ou modelo aprovado
+  // (oficial). Quem decide é o servidor, pela capability do canal.
+  const doCanal = useModelosDaCampanha(canal);
+  const ehOficial = doCanal.data?.modo === "template";
+  // Rápida só no número oficial: trocar para um número por QR volta a gradual.
+  const rapida = ehOficial && velocidade === "rapida";
+  const providerDoCanal = (canais.data ?? []).find((c) => c.id === canal)?.provider ?? null;
+  const modeloEscolhido =
+    modelo && doCanal.data
+      ? (doCanal.data.modelos.find(
+          (m) => m.name === modelo.name && m.language === modelo.language,
+        ) ?? null)
+      : null;
+  const modeloPronto =
+    modelo !== null &&
+    modeloEscolhido !== null &&
+    variaveisIncompletas(modeloEscolhido, modelo.variables).length === 0;
 
   const funis = useFunis();
   const etapas = useEtapas(funil || null);
@@ -94,60 +112,36 @@ export function NovaCampanha() {
     filtro.etapas.length > 0 ||
     filtro.sem_interacao_ha_dias !== null;
 
-  // Número oficial (Meta): a mensagem pode ser modelo aprovado. A tela não
-  // interpreta o provider — pergunta à mesma função que a Inbox usa.
-  const canalEscolhido = (canais.data ?? []).find((c) => c.id === canal) ?? null;
-  const oficial = fonteDeTemplates(canalEscolhido?.provider) === "oficial";
-  const usaModelo = oficial && tipo === "template";
-  const { aprovados } = useModelosAprovados(oficial ? "oficial" : null);
-  const resumoDoModelo = usaModelo
-    ? resumirModelo(
-        aprovados.find((m) => m.name === modelo.nome && m.language === modelo.idioma) ?? null,
-        modelo.params,
-      )
-    : null;
-  const corpoDaMensagem = usaModelo ? (resumoDoModelo?.corpo ?? "") : texto.trim();
-
   const podeSalvar =
     nome.trim() !== "" &&
     canal !== "" &&
-    (usaModelo ? !!resumoDoModelo?.completo : texto.trim() !== "") &&
+    (ehOficial ? modeloPronto : texto.trim() !== "") &&
     temCriterio &&
     (baseLegal !== "legitimate_interest" || liaRef.trim() !== "");
-
-  function escolherCanal(id: string) {
-    setCanal(id);
-    const escolhido = (canais.data ?? []).find((c) => c.id === id) ?? null;
-    // Número oficial nasce com MODELO: texto livre ali só chega a quem escreveu
-    // nas últimas 24h, e quem cria campanha quase sempre quer falar com o resto.
-    const ehOficial = fonteDeTemplates(escolhido?.provider) === "oficial";
-    setTipo(ehOficial ? "template" : "text");
-    setModelo({ nome: "", idioma: "", params: {} });
-    if (ehOficial) setExtras([]);
-  }
 
   async function salvar() {
     const criada = await criar.mutateAsync({
       name: nome.trim(),
       channel_session_id: canal,
-      message_body: corpoDaMensagem,
-      ...(usaModelo
+      ...(ehOficial && modelo
         ? {
-            message_kind: "template",
-            template_name: modelo.nome,
-            template_language: modelo.idioma,
-            template_params: modelo.params,
+            message_mode: "template",
+            provider_template_name: modelo.name,
+            provider_template_language: modelo.language,
+            provider_template_variables: modelo.variables,
           }
-        : { message_kind: "text" }),
+        : { message_body: texto.trim() }),
       base_legal: baseLegal,
       lia_ref: liaRef.trim() || null,
       audience_filter: filtro,
-      intervalo_segundos: intervalo ? Number(intervalo) : null,
+      // Na rápida o intervalo não vale (a rajada tem o próprio espaçamento).
+      intervalo_segundos: intervalo && !rapida ? Number(intervalo) : null,
+      velocidade: rapida ? "rapida" : "gradual",
       janela_inicio_hora: janelaInicio ? Number(janelaInicio) : null,
       janela_fim_hora: janelaFim ? Number(janelaFim) : null,
       teto_diario: tetoDiario ? Number(tetoDiario) : null,
       teto_horario: tetoHorario ? Number(tetoHorario) : null,
-      channel_session_ids: usaModelo ? [] : extras,
+      channel_session_ids: ehOficial ? [] : extras,
       pipeline_id: funil || null,
       stage_id: etapa || null,
       agent_id: agente || null,
@@ -181,7 +175,11 @@ export function NovaCampanha() {
             id="canal"
             className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
             value={canal}
-            onChange={(e) => escolherCanal(e.target.value)}
+            onChange={(e) => {
+              setCanal(e.target.value);
+              // Cada número tem os próprios modelos: o escolhido no outro não vale aqui.
+              setModelo(null);
+            }}
           >
             <option value="">{t("Escolha um número")}</option>
             {(canais.data ?? []).map((c) => (
@@ -197,15 +195,14 @@ export function NovaCampanha() {
           )}
         </div>
 
-        {usaModelo && (canais.data ?? []).length > 1 && (
+        {ehOficial && (canais.data ?? []).length > 1 && (
           <p className="text-sm text-muted-foreground">
             {t(
-              "Campanha de modelo aprovado fala só por este número: o modelo é da conta dele, e outro número pode não ter o mesmo modelo.",
+              "Campanha com modelo aprovado sai por um número só: cada número tem os próprios modelos na plataforma.",
             )}
           </p>
         )}
-
-        {!usaModelo && (canais.data ?? []).length > 1 && (
+        {!ehOficial && (canais.data ?? []).length > 1 && (
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("Falar também por estes números")}</legend>
             <p className="text-sm text-muted-foreground">
@@ -282,7 +279,9 @@ export function NovaCampanha() {
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Público")}</h2>
         <p className="text-sm text-muted-foreground">
-          {t("Escolha pelo menos um critério — uma lista sem recorte ninguém confere antes de apertar.")}
+          {t(
+            "Escolha pelo menos um critério — uma lista sem recorte ninguém confere antes de apertar.",
+          )}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -369,10 +368,17 @@ export function NovaCampanha() {
             onClick={() =>
               previa.mutate({
                 audience_filter: filtro,
-                message_body: corpoDaMensagem,
-                ...(canal ? { channel_session_id: canal } : {}),
-                message_kind: usaModelo ? "template" : "text",
-                ...(usaModelo ? { template_params: modelo.params } : {}),
+                message_body: ehOficial ? "" : texto,
+                ...(ehOficial && modelo
+                  ? {
+                      modelo: {
+                        channel_session_id: canal,
+                        name: modelo.name,
+                        language: modelo.language,
+                        variables: modelo.variables,
+                      },
+                    }
+                  : {}),
               })
             }
           >
@@ -381,9 +387,7 @@ export function NovaCampanha() {
           {previa.data && (
             <p className="text-sm">
               <strong>{previa.data.elegiveis}</strong> {t("podem receber")}
-              {previa.data.excluidos > 0
-                ? ` · ${previa.data.excluidos} ${t("ficam de fora")}`
-                : ""}
+              {previa.data.excluidos > 0 ? ` · ${previa.data.excluidos} ${t("ficam de fora")}` : ""}
             </p>
           )}
         </div>
@@ -407,33 +411,13 @@ export function NovaCampanha() {
 
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Mensagem")}</h2>
-        {oficial && (
-          <fieldset className="space-y-2">
-            <legend className="sr-only">{t("Tipo de mensagem")}</legend>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="tipo-de-mensagem"
-                value="template"
-                checked={tipo === "template"}
-                onChange={() => setTipo("template")}
-              />
-              {t("Modelo aprovado da Meta — chega a qualquer contato")}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="tipo-de-mensagem"
-                value="text"
-                checked={tipo === "text"}
-                onChange={() => setTipo("text")}
-              />
-              {t("Texto livre — só para quem escreveu para este número nas últimas 24h")}
-            </label>
-          </fieldset>
-        )}
-        {usaModelo ? (
-          <ModeloDaCampanha fonte="oficial" valor={modelo} onChange={setModelo} />
+        {ehOficial ? (
+          <ModeloDaCampanha
+            channelSessionId={canal}
+            provider={providerDoCanal}
+            valor={modelo}
+            onChange={setModelo}
+          />
         ) : (
           <>
             <Textarea
@@ -443,13 +427,6 @@ export function NovaCampanha() {
               placeholder={t("Escreva como você falaria com uma pessoa só.")}
               aria-label={t("Texto da mensagem")}
             />
-            {oficial && (
-              <p className="text-sm text-warning-fg">
-                {t(
-                  "Quem não escreveu para este número nas últimas 24h fica fora da lista: a Meta recusa texto livre fora dessa janela.",
-                )}
-              </p>
-            )}
             <div className="space-y-1 text-sm text-muted-foreground">
               <p>{t("Você pode usar:")}</p>
               <ul className="space-y-1">
@@ -466,6 +443,7 @@ export function NovaCampanha() {
                   </li>
                 ))}
               </ul>
+              <p>{t('Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.')}</p>
               <p>
                 {t(
                   "Quem não tiver o dado que a mensagem usa fica de fora, com o motivo na lista — mensagem com buraco não sai.",
@@ -479,7 +457,9 @@ export function NovaCampanha() {
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Quem responder")}</h2>
         <p className="text-sm text-muted-foreground">
-          {t("Em branco, tudo segue como hoje: o card nasce no funil do número e quem atende é o agente publicado nele.")}
+          {t(
+            "Em branco, tudo segue como hoje: o card nasce no funil do número e quem atende é o agente publicado nele.",
+          )}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -537,29 +517,34 @@ export function NovaCampanha() {
             ))}
           </select>
           <p className="text-sm text-muted-foreground">
-            {t("Vale só para conversas que nascem desta campanha: quem já falava com você continua com quem o atendia. Quem aborda precisa saber dizer de onde veio o contato — essa resposta tem de estar no material do agente escolhido.")}
+            {t(
+              "Vale só para conversas que nascem desta campanha: quem já falava com você continua com quem o atendia. Quem aborda precisa saber dizer de onde veio o contato — essa resposta tem de estar no material do agente escolhido.",
+            )}
           </p>
         </div>
       </Card>
 
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Ritmo desta campanha")}</h2>
+        {canal && <VelocidadeDaCampanha valor={velocidade} onChange={setVelocidade} ehOficial={ehOficial} />}
         <p className="text-sm text-muted-foreground">
           {t(
             "Em branco, vale o ritmo do número (Conexões › Proteção de envio). O que você puser aqui só pode deixar mais devagar.",
           )}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="intervalo">{t("Intervalo mínimo entre mensagens (segundos)")}</Label>
-            <Input
-              id="intervalo"
-              type="number"
-              min={1}
-              value={intervalo}
-              onChange={(e) => setIntervalo(e.target.value)}
-            />
-          </div>
+          {!rapida && (
+            <div className="space-y-2">
+              <Label htmlFor="intervalo">{t("Intervalo mínimo entre mensagens (segundos)")}</Label>
+              <Input
+                id="intervalo"
+                type="number"
+                min={1}
+                value={intervalo}
+                onChange={(e) => setIntervalo(e.target.value)}
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="teto">{t("Máximo por dia")}</Label>
             <Input

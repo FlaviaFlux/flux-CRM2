@@ -223,13 +223,13 @@ describe("o pré-voo da definição", () => {
     // A chave do corpo NÃO tem prefixo — `slotKey` só prefixa header, botão e
     // card. Errar isto do lado de quem envia faz o pré-voo recusar um envio
     // completo, então o formato exato importa e está fixado aqui.
-    // Passar devolve a definição conferida: é dela que o envio tira a foto de
-    // rodapé e botões (`lib/messaging/modelo-da-mensagem.ts`).
-    await expect(conferir({ "1": "Marcela" })).resolves.toEqual({
-      name: "boas_vindas",
-      language: "pt_BR",
-      components: [{ type: "BODY", text: "Olá {{1}}." }],
-    });
+    // Passar é devolver o CONTRATO conferido: o transporte lê dele a ordem dos
+    // valores (cabeçalho, corpo, botão) em vez de consultar o banco de novo.
+    const contrato = await conferir({ "1": "Marcela" });
+    expect(contrato?.slots.map((s) => s.key)).toEqual(["1"]);
+    // E os componentes vão junto: é deles que o envio tira a foto de rodapé e
+    // botões (`lib/messaging/modelo-da-mensagem.ts`).
+    expect(contrato?.components).toEqual([{ type: "BODY", text: "Olá {{1}}." }]);
   });
 
   it("definição NÃO espelhada passa — o provedor é a autoridade, não o espelho", async () => {
