@@ -362,6 +362,49 @@ export function comandosDaFila(automaticoDaOrg?: boolean): ComandoDoBanco[] {
 }
 
 /**
+ * O FILTRO DE COMANDO, com o ATALHO que o índice consegue usar (distribuição Flux).
+ *
+ * `comando_da_conversa` é campo CALCULADO (função `security definer` por linha):
+ * nenhum índice o enxerga, então `?comando_da_conversa=in.(…)` sozinho obrigava o
+ * banco a avaliar a função em TODA conversa da organização. Medido em produção
+ * (27/10/2026, `pg_stat_statements`): a aba Fila levava 2–7 s e estourava o
+ * `statement_timeout` de 8 s, enquanto "Todas" respondia em <1 s.
+ *
+ * Os predicados extras são CONSEQUÊNCIAS da regra de `fn_comando_da_conversa`,
+ * nunca uma segunda régua: quem decide continua sendo o `in` no campo calculado,
+ * que vai junto. Eles só cortam antes o que a regra recusaria de qualquer jeito:
+ *
+ *   - dono preenchido ⇒ `humano` (primeiro ramo da regra). Sem `humano` no
+ *     pedido, só entra `assigned_to_user_id is null`; só `humano`, o contrário.
+ *   - status encerrado sem dono ⇒ `encerrada`. Pedido só de `aguardando` e
+ *     `automatico` exclui os encerrados.
+ *
+ * Cortar a mais seria esconder conversa; cortar a menos só custa tempo. Por isso
+ * cada atalho vem de um ramo da regra, e `tests/unit/comando-atalho-indexavel.test.ts`
+ * confere contra `comandoDaConversa` que nenhum atalho exclui linha que a regra
+ * aceitaria.
+ */
+export function aplicarComando<
+  C extends {
+    in: (coluna: string, valores: readonly string[]) => C;
+    is: (coluna: string, valor: null) => C;
+    not: (coluna: string, operador: string, valor: unknown) => C;
+  },
+>(consulta: C, comandos: readonly string[]): C {
+  let q = consulta.in("comando_da_conversa", comandos);
+  if (comandos.length === 0) return q;
+  if (!comandos.includes("humano")) {
+    q = q.is("assigned_to_user_id", null);
+  } else if (comandos.every((c) => c === "humano")) {
+    q = q.not("assigned_to_user_id", "is", null);
+  }
+  if (comandos.every((c) => c === "aguardando" || c === "automatico")) {
+    q = q.not("status", "in", `(${[...STATUS_ENCERRADOS].join(",")})`);
+  }
+  return q;
+}
+
+/**
  * A ORDEM DA FILA, num lugar só — mais tempo esperando primeiro.
  *
  * ─── A régua é a mensagem mais ANTIGA sem resposta, não a última (issue #990) ─

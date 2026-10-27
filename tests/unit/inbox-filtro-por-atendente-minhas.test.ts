@@ -22,8 +22,12 @@ function consulta(filtros: Array<(l: Linha) => boolean> = []) {
     select: () => q,
     eq: (c: string, v: unknown) => com((l) => l[c] === v),
     in: (c: string, vs: unknown[]) => com((l) => vs.includes(l[c])),
-    not: (c: string, _op: "in", lista: string) =>
-      com((l) => !lista.slice(1, -1).split(",").includes(String(l[c]))),
+    // `is` e `not.is` entram com o atalho indexável de `aplicarComando`.
+    is: (c: string, v: unknown) => com((l) => l[c] === v),
+    not: (c: string, op: "in" | "is", lista: string | null) =>
+      op === "is"
+        ? com((l) => l[c] !== lista)
+        : com((l) => !String(lista).slice(1, -1).split(",").includes(String(l[c]))),
     gt: (c: string, v: number) => com((l) => Number(l[c]) > v),
     or: () => q,
     then: (ok: (r: { count: number; error: null }) => unknown) =>
