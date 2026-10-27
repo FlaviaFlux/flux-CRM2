@@ -17,7 +17,7 @@ import { orgAtivaDaApi } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import { orgTemAutomatico } from "@/lib/ai/agents/org-tem-automatico";
-import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
+import { aplicarComando, comandosDaFila } from "@/lib/inbox/comando-da-conversa";
 import { aplicarMarcadores, modoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { createClient } from "@/lib/supabase/server";
 import { idsDeContatosPessoais } from "../_handler";
@@ -160,10 +160,12 @@ export async function GET(req: NextRequest): Promise<Response> {
     // `tests/unit/fila-tem-uma-definicao-so.test.ts` e
     // `tests/invariants/gov-5b-inbox-scope-counts.test.ts`, porque um badge que conta o
     // que a aba não mostra manda o atendente procurar trabalho que não existe.
-    countExact().in("comando_da_conversa", comandosDaFila(automaticoDaOrg)),
+    // `aplicarComando`, a mesma da lista: o badge conta pelo mesmo filtro e
+    // ganha o mesmo atalho indexável (o campo calculado sozinho custava ~1,3 s).
+    aplicarComando(countExact(), comandosDaFila(automaticoDaOrg)),
     // A aba "Automático". Antes ela pedia `status='ai_handling'`, escrito por UM
     // caminho só em produção — por isso vivia quase vazia.
-    countExact().eq("comando_da_conversa", "automatico"),
+    aplicarComando(countExact(), ["automatico"]),
     // Minhas IGNORA o atendente escolhido pelo gerente: a lista da aba pede
     // `assigned_to=me`, que vence a escolha. Com o atendente aqui, o badge
     // contava `eu E ele` (zero) enquanto a aba listava as do gerente.

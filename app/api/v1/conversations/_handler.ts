@@ -18,7 +18,7 @@ import type {
 } from "@/lib/schemas";
 import type { Conversation } from "@/lib/types/messaging";
 import { normalizarTermoDeBusca } from "@/lib/inbox/termo-de-busca";
-import { ORDEM_DA_ESPERA, ehAFila } from "@/lib/inbox/comando-da-conversa";
+import { ORDEM_DA_ESPERA, aplicarComando, ehAFila } from "@/lib/inbox/comando-da-conversa";
 import { aplicarMarcadores } from "@/lib/inbox/marcador-da-conversa";
 
 /**
@@ -224,8 +224,12 @@ export async function listConversationsHandler(
   // O filtro de QUEM MANDA (migration 0203). Vai no banco, e não em memória, para
   // o cursor de paginação continuar valendo: filtrar depois de paginar devolveria
   // páginas curtas e um "carregar mais" que às vezes não traz nada.
+  //
+  // `aplicarComando`, e não o `.in` cru: o campo calculado não tem índice, e o
+  // atalho que vem junto (dono vazio, status aberto) é o que deixa o banco usar
+  // um — a Fila estourava o statement_timeout avaliando a função na org inteira.
   if (q.comando && q.comando.length > 0) {
-    query = query.in("comando_da_conversa", q.comando);
+    query = aplicarComando(query, q.comando);
   }
   // Depois do `status` de propósito: pedir um status terminal E `exclude_finished`
   // é contradição, e a resposta certa para uma contradição é lista vazia — não
