@@ -7,17 +7,6 @@
  * colunas que têm CHECK e reprova divergência.
  */
 
-/**
- * O que a campanha envia (migration 0800, CHECK `campaigns_message_kind_check`).
- *
- * `text` é o texto livre de sempre (`message_body`). `template` é um modelo
- * aprovado da Meta — o único conteúdo que um número da API oficial pode mandar
- * para quem não falou com a empresa nas últimas 24h.
- */
-export const TIPOS_DE_MENSAGEM = ["text", "template"] as const;
-
-export type TipoDeMensagem = (typeof TIPOS_DE_MENSAGEM)[number];
-
 export const STATUS_DA_CAMPANHA = [
   "draft",
   "preparing",
@@ -31,6 +20,27 @@ export const STATUS_DA_CAMPANHA = [
 ] as const;
 
 export type StatusDaCampanha = (typeof STATUS_DA_CAMPANHA)[number];
+
+/**
+ * O que a campanha manda (migration 0710). `text` = corpo livre em
+ * `message_body`, para número por QR; `template` = modelo aprovado, para número
+ * oficial, que só aceita texto livre dentro das 24 horas da última mensagem do
+ * cliente — e campanha fala justamente com quem não escreveu.
+ */
+export const MODOS_DA_MENSAGEM = ["text", "template"] as const;
+
+export type ModoDaMensagem = (typeof MODOS_DA_MENSAGEM)[number];
+
+/**
+ * Em que velocidade a campanha sai (migration 0711). `gradual` = uma mensagem
+ * por número a cada rodada do cron (uma por minuto) — a proteção do número por
+ * QR e o mais seguro para a qualidade de qualquer número. `rapida` = rajada de
+ * várias por segundo, só com modelo aprovado: o número oficial não é banido por
+ * volume, quem limita ali é a plataforma (nível diário e mensagens por segundo).
+ */
+export const VELOCIDADES_DA_CAMPANHA = ["gradual", "rapida"] as const;
+
+export type VelocidadeDaCampanha = (typeof VELOCIDADES_DA_CAMPANHA)[number];
 
 export const STATUS_DO_DESTINATARIO = [
   "pending",
@@ -89,12 +99,6 @@ export const MOTIVOS_DE_EXCLUSAO = [
   "suprimido",
   /** Spec 21: o contato virou pessoal e saiu da campanha com a saída própria. */
   "contato_pessoal",
-  /**
-   * Campanha de TEXTO num número que só aceita texto livre dentro da janela de
-   * 24h (API oficial), para quem está fora dela. A plataforma recusaria (131047);
-   * melhor a pessoa aparecer em "Fora da lista" do que em "Falharam".
-   */
-  "janela_fechada",
 ] as const;
 
 export type MotivoDeExclusao = (typeof MOTIVOS_DE_EXCLUSAO)[number];
@@ -112,5 +116,4 @@ export const TEXTO_DA_EXCLUSAO: Record<MotivoDeExclusao, string> = {
   ja_em_campanha: "Já está em outra campanha ainda não concluída",
   suprimido: "Está na lista de exclusão de campanhas",
   contato_pessoal: "Contato marcado como pessoal",
-  janela_fechada: "Fora da janela de 24h do número oficial — use um modelo aprovado",
 };

@@ -28,15 +28,11 @@ const previa = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (chave: string) => chave }));
-// A lista de modelos aprovados (useQuery) só existe com número oficial; aqui
-// não há número, e o seletor de modelo não é o que estes casos medem.
-vi.mock("@/components/campanhas/ModeloDaCampanha", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/components/campanhas/ModeloDaCampanha")>()),
-  useModelosAprovados: () => ({ aprovados: [], isLoading: false, isError: false }),
-}));
 vi.mock("@/hooks/campanhas/useCampanhas", () => ({
   useCriarCampanha: () => ({ mutateAsync: vi.fn(), isPending: false }),
   usePreviaDaAudiencia: () => previa,
+  // Número por QR: o formulário mostra o campo de texto, que é o caso deste teste.
+  useModelosDaCampanha: () => ({ data: { modo: "text", modelos: [] }, isLoading: false }),
 }));
 vi.mock("@/hooks/channels/useChannelSessions", () => ({
   useChannelSessions: () => ({ data: [], isLoading: false }),
