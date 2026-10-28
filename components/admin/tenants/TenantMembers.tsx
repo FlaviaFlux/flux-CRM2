@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useChangeMemberEmail,
+  useSetMemberPassword,
   useTenantMembers,
   type MembroDoTenant,
 } from "@/hooks/useTenantMembers";
@@ -40,6 +41,7 @@ export function TenantMembers({ organizationId, readOnly = false }: TenantMember
   const t = useT();
   const { data, isLoading, isError } = useTenantMembers(organizationId);
   const [editando, setEditando] = useState<MembroDoTenant | null>(null);
+  const [definindoSenha, setDefinindoSenha] = useState<MembroDoTenant | null>(null);
 
   const membros = data?.data.members ?? [];
 
@@ -72,25 +74,44 @@ export function TenantMembers({ organizationId, readOnly = false }: TenantMember
               </div>
             </div>
             {!readOnly && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setEditando(m)}
-                disabled={m.is_platform_admin || !!m.revoked_at}
-                title={
-                  m.is_platform_admin
-                    ? t(
-                        "O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.",
-                      )
-                    : m.revoked_at
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDefinindoSenha(m)}
+                  disabled={m.is_platform_admin || !!m.revoked_at}
+                  title={
+                    m.is_platform_admin
                       ? t(
-                          "Quem perdeu o acesso a este tenant não tem o e-mail trocado por aqui: a empresa avisada seria uma em que a pessoa já não está.",
+                          "A senha de um administrador da plataforma só é trocada pelo próprio dono da conta.",
                         )
-                      : undefined
-                }
-              >
-                {t("Alterar e-mail")}
-              </Button>
+                      : m.revoked_at
+                        ? t("Quem perdeu o acesso a este tenant não tem a senha trocada por aqui.")
+                        : undefined
+                  }
+                >
+                  {t("Definir nova senha")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditando(m)}
+                  disabled={m.is_platform_admin || !!m.revoked_at}
+                  title={
+                    m.is_platform_admin
+                      ? t(
+                          "O e-mail de um administrador da plataforma só é trocado pelo próprio dono da conta.",
+                        )
+                      : m.revoked_at
+                        ? t(
+                            "Quem perdeu o acesso a este tenant não tem o e-mail trocado por aqui: a empresa avisada seria uma em que a pessoa já não está.",
+                          )
+                        : undefined
+                  }
+                >
+                  {t("Alterar e-mail")}
+                </Button>
+              </div>
             )}
           </li>
         ))}
@@ -100,6 +121,11 @@ export function TenantMembers({ organizationId, readOnly = false }: TenantMember
         organizationId={organizationId}
         membro={editando}
         onClose={() => setEditando(null)}
+      />
+      <DefinirSenhaDialog
+        organizationId={organizationId}
+        membro={definindoSenha}
+        onClose={() => setDefinindoSenha(null)}
       />
     </div>
   );
@@ -196,6 +222,127 @@ function TrocarEmailDialog({
           </Button>
           <Button onClick={salvar} disabled={!valido || igual || trocar.isPending}>
             {trocar.isPending ? t("Salvando…") : t("Salvar e-mail")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Emergência de quem ficou trancado para fora. A senha é digitada duas vezes
+ * (não há como a pessoa "ver" o que o admin digitou) e nunca volta da API: quem
+ * define precisa repassá-la por um canal seguro.
+ */
+function DefinirSenhaDialog({
+  organizationId,
+  membro,
+  onClose,
+}: {
+  organizationId: string;
+  membro: MembroDoTenant | null;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [senha, setSenha] = useState("");
+  const [confirmacao, setConfirmacao] = useState("");
+  const definir = useSetMemberPassword(organizationId);
+
+  const curta = senha.length > 0 && senha.length < 8;
+  const diferente = confirmacao.length > 0 && confirmacao !== senha;
+  const pronta = senha.length >= 8 && senha.length <= 72 && confirmacao === senha;
+
+  function fechar() {
+    if (definir.isPending) return;
+    setSenha("");
+    setConfirmacao("");
+    onClose();
+  }
+
+  function salvar() {
+    if (!membro) return;
+    definir.mutate(
+      { userId: membro.user_id, password: senha },
+      {
+        onSuccess: (res) => {
+          const aviso = res.data.aviso_ao_dono;
+          toast.success(t("Senha definida."), {
+            description:
+              aviso === "enviado"
+                ? t("A pessoa já entra com a nova senha e recebeu um e-mail avisando da troca.")
+                : t(
+                    "A pessoa já entra com a nova senha. O aviso por e-mail não saiu: avise-a por outro canal.",
+                  ),
+          });
+          setSenha("");
+          setConfirmacao("");
+          onClose();
+        },
+        onError: (err: Error) =>
+          toast.error(t("Não foi possível definir a senha"), { description: err.message }),
+      },
+    );
+  }
+
+  return (
+    <Dialog
+      open={!!membro}
+      onOpenChange={(aberto) => {
+        if (!aberto) fechar();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("Definir nova senha")}</DialogTitle>
+          <DialogDescription>
+            {t(
+              "Vale para todas as empresas em que esta pessoa entra, e a senha atual deixa de funcionar. Repasse a nova por um canal seguro.",
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm">
+            {t("Conta")}: <strong>{membro?.email ?? "—"}</strong>
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="nova-senha">{t("Nova senha")}</Label>
+            <Input
+              id="nova-senha"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              autoComplete="new-password"
+              aria-invalid={curta}
+            />
+            {curta && (
+              <p className="text-xs text-destructive" role="alert">
+                {t("A senha precisa ter pelo menos 8 caracteres.")}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmar-senha">{t("Repita a nova senha")}</Label>
+            <Input
+              id="confirmar-senha"
+              type="password"
+              value={confirmacao}
+              onChange={(e) => setConfirmacao(e.target.value)}
+              autoComplete="new-password"
+              aria-invalid={diferente}
+            />
+            {diferente && (
+              <p className="text-xs text-destructive" role="alert">
+                {t("As senhas não coincidem.")}
+              </p>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={fechar} disabled={definir.isPending}>
+            {t("Cancelar")}
+          </Button>
+          <Button onClick={salvar} disabled={!pronta || definir.isPending}>
+            {definir.isPending ? t("Salvando…") : t("Definir senha")}
           </Button>
         </DialogFooter>
       </DialogContent>

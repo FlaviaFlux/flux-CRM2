@@ -10,6 +10,7 @@ import { useTeamMembers, type TeamMember } from "@/hooks/team/useTeamMembers";
 import { useChangeRole } from "@/hooks/team/useChangeRole";
 import { useReactivateMember } from "@/hooks/team/useReactivateMember";
 import { useRevokeMember } from "@/hooks/team/useRevokeMember";
+import { useSendPasswordReset } from "@/hooks/team/useSendPasswordReset";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,9 +58,11 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
   const changeRole = useChangeRole();
   const revoke = useRevokeMember();
   const reativar = useReactivateMember();
+  const linkDeSenha = useSendPasswordReset();
 
   const [interfaceMember, setInterfaceMember] = useState<TeamMember | null>(null);
   const [revokeDialog, setRevokeDialog] = useState<TeamMember | null>(null);
+  const [senhaDialog, setSenhaDialog] = useState<TeamMember | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
@@ -198,12 +201,22 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                               {t("Devolver acesso")}
                             </DropdownMenuItem>
                           ) : (
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => setRevokeDialog(m)}
-                            >
-                              {t("Revogar acesso")}
-                            </DropdownMenuItem>
+                            <>
+                              {/*
+                                Link, e não "definir senha": o login pode estar
+                                em outras organizações, e o admin daqui não
+                                escolhe nem vê a senha de ninguém.
+                              */}
+                              <DropdownMenuItem onClick={() => setSenhaDialog(m)}>
+                                {t("Enviar link de redefinição de senha")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => setRevokeDialog(m)}
+                              >
+                                {t("Revogar acesso")}
+                              </DropdownMenuItem>
+                            </>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -225,6 +238,45 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
           onClose={() => setInterfaceMember(null)}
         />
       )}
+      <Dialog
+        open={!!senhaDialog}
+        onOpenChange={(o) => !o && !linkDeSenha.isPending && setSenhaDialog(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("Enviar link de redefinição de senha")}</DialogTitle>
+            <DialogDescription>
+              {t("Vai para")} <strong>{senhaDialog?.email ?? senhaDialog?.user_id}</strong>.{" "}
+              {t(
+                "A pessoa escolhe a nova senha pelo link; a senha atual continua valendo até ela trocar.",
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              disabled={linkDeSenha.isPending}
+              onClick={() => setSenhaDialog(null)}
+            >
+              {t("Cancelar")}
+            </Button>
+            <Button
+              disabled={linkDeSenha.isPending}
+              onClick={async () => {
+                if (!senhaDialog) return;
+                try {
+                  await linkDeSenha.mutateAsync(senhaDialog.user_id);
+                  setSenhaDialog(null);
+                } catch {
+                  /* showApiError already triggered by the hook */
+                }
+              }}
+            >
+              {linkDeSenha.isPending ? t("Enviando…") : t("Enviar link")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!revokeDialog} onOpenChange={(o) => !o && setRevokeDialog(null)}>
         <DialogContent>
           <DialogHeader>

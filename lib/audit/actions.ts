@@ -1246,6 +1246,11 @@ export const AUDIT_ACTIONS = [
   "platform_admin.tenant_members_viewed",
   // O admin da plataforma corrigiu o e-mail de login de um membro (só hashes).
   "member.email_changed",
+  // O admin da ORGANIZAÇÃO mandou a um membro o link de redefinição de senha
+  // (`/api/v1/team/[user_id]/password-reset`) — só o hash do e-mail.
+  "member.password_reset_link_sent",
+  // O admin da PLATAFORMA definiu a senha de um membro. A senha nunca entra aqui.
+  "member.password_set_by_platform_admin",
 
   // #2593: o TELEFONE de uma ficha SEM número foi GRAVADO na hora, sem decisão
   // humana, quando o agente ouviu o número na conversa — `proporDadoDoContato`
