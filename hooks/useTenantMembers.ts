@@ -35,3 +35,14 @@ export function useChangeMemberEmail(tenantId: string) {
     },
   });
 }
+
+/** O admin da plataforma define a senha de um membro (emergência). */
+export function useSetMemberPassword(tenantId: string) {
+  return useMutation({
+    mutationFn: ({ userId, password }: { userId: string; password: string }) =>
+      apiClient.patch<{ data: { user_id: string; aviso_ao_dono: string } }>(
+        `/api/v1/admin/tenants/${tenantId}/members/${userId}/password`,
+        { password },
+      ),
+  });
+}
