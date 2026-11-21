@@ -56,9 +56,6 @@ export interface PedidoDeDefinicao {
   values: Record<string, string>;
 }
 
-/** O contrato conferido e os componentes da definição de onde ele saiu. */
-export type ContratoConferido = TemplateContract & { components: unknown };
-
 /**
  * Lança com uma frase acionável quando a definição não serve. Silêncio é
  * aprovação.
@@ -75,7 +72,7 @@ export type ContratoConferido = TemplateContract & { components: unknown };
 export async function conferirDefinicao(
   db: SupabaseClient,
   pedido: PedidoDeDefinicao,
-): Promise<ContratoConferido | null> {
+): Promise<TemplateContract | null> {
   if (!pedido.name || !pedido.language) {
     throw new Error("template_incompleto: nome e idioma são obrigatórios em type=template");
   }
@@ -143,7 +140,5 @@ export async function conferirDefinicao(
       `template_missing_values: "${pedido.name}" espera ${faltando.length} valor(es) — falta: ${nomes}`,
     );
   }
-  // Os componentes vão junto: quem envia guarda deles a foto de rodapé e
-  // botões (`lib/messaging/modelo-da-mensagem.ts`, distribuição Flux).
-  return { ...contrato, components: linha.components };
+  return contrato;
 }
