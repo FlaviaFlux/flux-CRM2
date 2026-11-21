@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { beforeAll, describe, expect, it } from "vitest";
 
 /**
- * A LEITURA DOS DESTINATÁRIOS NÃO PAGA A REGRA DE ESCRITA (migration 0801).
+ * A LEITURA DOS DESTINATÁRIOS NÃO PAGA A REGRA DE ESCRITA (migration 0786).
  *
  * `campaign_recipients_write` era `for all`, e `for all` vale também para
  * SELECT: o Postgres junta as permissivas por OR, e o plano avaliava

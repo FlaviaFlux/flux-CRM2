@@ -1,6 +1,6 @@
 -- manifest: **A leitura de `campaign_recipients` deixa de pagar a regra de escrita (distribuição Flux).** `campaign_recipients_write` era `for all`, que vale também para SELECT: toda leitura avaliava `fn_is_platform_admin_full()` e `fn_role_at_least()` → `fn_support_context()` em CADA destinatário. Medido em produção com `EXPLAIN ANALYZE` (23/10/2026), campanha de 1511: 11.961 ms com RLS contra 2 ms sem ela — acima do `statement_timeout`, e a tela da campanha mostrava números zerados e a lista vazia. Mesmo conserto da 0553 (catálogo): escrita em `insert`/`update`/`delete`, chamada sem dependência da linha em `(select …)`. Quem lê e quem escreve continua idêntico. Número alto de propósito: migration só do fork, longe da numeração do produto.
 
--- ---- leitura de destinatários sem a regra de escrita (migration 0801, distribuição Flux) ----
+-- ---- leitura de destinatários sem a regra de escrita (migration 0786, distribuição Flux) ----
 -- A ESCRITA é `insert`/`update`/`delete`, NUNCA `for all`: `for all` vale também
 -- para SELECT, e o OR das permissivas fazia toda leitura avaliar
 -- `fn_role_at_least` (security definer, que chama `fn_support_context`) em cada
