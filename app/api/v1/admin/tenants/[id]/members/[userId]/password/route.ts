@@ -23,6 +23,7 @@ import { z } from "zod";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { invalidarUsuario } from "@/lib/auth/cache-curto";
 import {
   falhaDaEscritaDePlatformAdmin,
   requirePlatformAdminEscrita,
@@ -130,6 +131,10 @@ export async function PATCH(
     });
     return fail("internal_error", "Não foi possível trocar a senha agora.", 500, { requestId });
   }
+  // As OUTRAS sessões da pessoa leem o usuário pelo cache curto (até 30 s):
+  // derrubá-lo aqui faz a troca valer nelas na próxima leitura, como a troca de
+  // e-mail já faz (`../email/route.ts`).
+  invalidarUsuario(userId);
 
   let avisoAoDono: AvisoAoDono = "sem_email";
   const email = atualizado?.user?.email ?? "";
