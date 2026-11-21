@@ -87503,10 +87503,11 @@ alter table public.campaigns
 -- bloco já trocou a policy, e a função que ela usava pode sair.
 drop function if exists public.fn_orgs_que_veem_conversas(text);
 
--- ---- Inbox: índices do atalho de `aplicarComando` (migration 0802, distribuição Flux) ----
+-- ---- Inbox: índices do pré-filtro do comando (migration 0802, distribuição Flux) ----
 --
 -- `aguardando` e `automatico` só existem sem dono, então a Fila e a aba
--- Automático pedem `assigned_to_user_id is null` ao lado do campo calculado. O
+-- Automático pedem `assigned_to_user_id is null` ao lado do campo calculado
+-- (`comPreFiltroDoComando`, do produto; antes era o `aplicarComando` do fork). O
 -- predicado do índice é SÓ `is null`: o PostgREST manda o resto como parâmetro,
 -- e índice parcial com predicado em parâmetro não é provado pelo planner. Ordem
 -- da Fila = `ORDEM_DA_ESPERA`; a aba Automático ordena por atividade.
