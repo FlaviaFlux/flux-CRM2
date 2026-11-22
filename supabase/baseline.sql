@@ -36635,7 +36635,7 @@ grant all on public.campaigns to service_role;
 alter table public.campaign_recipients enable row level security;
 
 drop policy if exists tenant_isolation_campaign_recipients_all on public.campaign_recipients;
--- As policies desta tabela moram no bloco da migration 0801, mais abaixo: a
+-- As policies desta tabela moram no bloco da migration 0786, mais abaixo: a
 -- versão `for all` que estava aqui era reinstalada a cada update e valia até a
 -- final chegar (`baseline-nao-constroi-o-que-derruba`).
 
@@ -36644,7 +36644,7 @@ grant select on public.campaign_recipients to authenticated;
 grant all on public.campaign_recipients to service_role;
 
 
--- ---- leitura de destinatários sem a regra de escrita (migration 0801, distribuição Flux) ----
+-- ---- leitura de destinatários sem a regra de escrita (migration 0786, distribuição Flux) ----
 -- A ESCRITA é `insert`/`update`/`delete`, NUNCA `for all`: `for all` vale também
 -- para SELECT, e o OR das permissivas fazia toda leitura avaliar
 -- `fn_role_at_least` (security definer, que chama `fn_support_context`) em cada
