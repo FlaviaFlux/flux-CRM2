@@ -2668,7 +2668,7 @@ trio_publicado() {
 # Só consulta registry; não escreve .env, banco, Docker ou configuração.
 preflight_instalacao() { # <X.Y.Z> <linux/platform> <WAHA_IMAGE efetiva>
   local versao="${1:-}" plataforma="${2:-}" waha="${3:-}"
-  if ! [[ "$versao" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  if ! [[ "$versao" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$ ]]; then
     printf 'A instalação ARM64 exige versão numérica publicada (X.Y.Z): %s\n' "$versao" >&2
     return 1
   fi
@@ -2686,7 +2686,7 @@ preflight_instalacao() { # <X.Y.Z> <linux/platform> <WAHA_IMAGE efetiva>
 # WAHA customizada/Plus nunca é substituída nem na sonda nem no update.
 preflight_plataforma_atualizacao() { # <vX.Y.Z> <linux/platform>; usa WAHA_IMAGE carregada
   local tag="${1:-}" plataforma="${2:-}" versao waha
-  if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z][a-z0-9]*\.[0-9]+)?$ ]]; then
     printf 'Atualização exige tag numérica publicada (vX.Y.Z): %s\n' "$tag" >&2
     return 1
   fi

@@ -21,6 +21,8 @@ esc() { printf '%s' "$1"; }
 git() {
   if [ "${1:-}" = fetch ]; then
     command git update-ref refs/deskcomm-runtime-tags/v1.2.0 "$BASE"
+    # Distribuição derivada (fork) publica `vX.Y.Z-<nome>.N` sobre a mesma base.
+    command git update-ref refs/deskcomm-runtime-tags/v1.2.0-flux.1 "$BASE"
   else command git "$@"; fi
 }
 dc() {
@@ -39,24 +41,26 @@ docker() {
     *State.Running*) printf 'true\n';;
     *State.Health*) if [ "$MODE" = unhealthy ] && [ "$role" = worker ]; then printf 'unhealthy\n'; else printf 'healthy\n'; fi;;
     *org.opencontainers.image.revision*)
-      if [ "$MODE" = official ]; then printf '%s\n' "$BASE"
+      if [ "$MODE" = official ] || [ "$MODE" = distribuicao ]; then printf '%s\n' "$BASE"
       elif [ "$MODE" = missing ]; then printf '<no value>\n'
       elif [ "$MODE" = divergent ] && [ "$role" = worker ]; then printf '%s\n' "$OTHER"
       else printf '%s\n' "$CUSTOM"; fi;;
-    *Config.Env*) printf 'APP_VERSION=1.2.0\n';;
+    *Config.Env*) if [ "$MODE" = distribuicao ]; then printf 'APP_VERSION=1.2.0-flux.1\n'; else printf 'APP_VERSION=1.2.0\n'; fi;;
     *) printf 'unexpected docker format: %s\n' "$format" >&2; return 1;;
   esac
 }
 source "$ROOT/hostgator-setup-kit/_runtime.sh"
-for MODE in official customized unhealthy missing divergent foreign; do
+for MODE in official distribuicao customized unhealthy missing divergent foreign; do
   collect_runtime_confirmation
   case "$MODE" in
-    official|customized) [ "$RUNTIME_CONFIRMED" = true ];;
+    official|distribuicao|customized) [ "$RUNTIME_CONFIRMED" = true ];;
     *) [ "$RUNTIME_CONFIRMED" = false ];;
   esac
-  if [ "$MODE" = official ]; then [ "$RUNTIME_REVISION" = "$BASE" ]; fi
+  if [ "$MODE" = official ] || [ "$MODE" = distribuicao ]; then [ "$RUNTIME_REVISION" = "$BASE" ]; fi
+  # O sufixo da distribuição chega inteiro ao JSON: é ele que a tela mostra.
+  if [ "$MODE" = distribuicao ]; then [ "$RUNTIME_VERSION" = 1.2.0-flux.1 ]; fi
   if [ "$MODE" = customized ]; then [ "$RUNTIME_REVISION" = "$CUSTOM" ] && [ "$RUNTIME_REVISION" != "$(command git rev-parse HEAD)" ]; fi
-  if [ "$MODE" = official ]; then runtime_can_install_release; else ! runtime_can_install_release; fi
+  if [ "$MODE" = official ] || [ "$MODE" = distribuicao ]; then runtime_can_install_release; else ! runtime_can_install_release; fi
   printf '%s\n' "$RUNTIME_CONFIRMATION" > "$TMP/$MODE.json"
 done
-printf 'runtime collector: official/customized/health/missing/divergent/project isolation passed\n'
+printf 'runtime collector: official/distribution/customized/health/missing/divergent/project isolation passed\n'
