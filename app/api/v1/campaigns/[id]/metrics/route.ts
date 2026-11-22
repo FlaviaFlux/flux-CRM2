@@ -9,35 +9,33 @@
  *
  * Sem RPC e sem `count(*) filter`: o PostgREST não expõe agregação condicional,
  * e criar uma função de banco para isto seria uma peça a mais para manter. A
- * consulta traz só os carimbos (seis colunas, sem PII) e conta em memória, com
+ * consulta traz só id, estados e carimbos (sem PII) e conta em memória, com
  * teto — acima dele a resposta diz que é parcial em vez de mentir.
  *
- * ═══ Por que a leitura é PAGINADA ═══
- *
- * O PostgREST corta toda resposta em `max_rows` (1000, `supabase/config.toml`)
- * sem erro nenhum: o `.limit(20_000)` que estava aqui devolvia 1000 linhas
- * caladas. Medido em produção: lista de 1485, e a barra contava só 1000 —
- * "758 ainda não enviadas · 37 falharam" não fechava com a lista. O fim é
- * provado pelo `count` exato ou por página vazia, nunca por página curta.
+ * Uma resposta é cortada pelo `max_rows` do PostgREST, mesmo com `.limit`
+ * maior. Por isso a leitura segue por id até a página vazia; página curta não
+ * prova o fim. O cursor não desloca linhas quando uma anterior é excluída.
+ * São leituras sucessivas, não um snapshot: estados e linhas podem mudar
+ * durante a chamada. `parcial` sinaliza linhas além do teto observado.
  */
 import { randomUUID } from "node:crypto";
 
 import type { NextRequest } from "next/server";
 
+import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { fail, ok } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
 import { progresso, taxasDaCampanha, type ContagemDaCampanha } from "@/lib/campanhas/metricas";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 /** Teto de linhas lidas por chamada. Acima disso a resposta se declara parcial. */
 const TETO = 20_000;
-/** Do tamanho do `max_rows` padrão: página maior seria cortada pelo servidor. */
 const TAMANHO_DA_PAGINA = 1000;
 
 type LinhaDeDestinatario = {
+  id: string;
   status: string;
   eligibility_status: string;
   sent_at: string | null;
@@ -48,39 +46,60 @@ type LinhaDeDestinatario = {
 };
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole("manager", { requestId, resource: "campaigns" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "campaigns",
+    role: "manager",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const teto = await tetoDeEscritaDoToken(authz, "campaigns_metricas", requestId);
+  if (teto) return teto;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
+  const org = { orgId: authz.organizationId };
   const { id } = await ctx.params;
 
-  const supabase = await createClient();
-  const linhas: LinhaDeDestinatario[] = [];
-  let total: number | null = null;
-  let parcial = true;
-  while (linhas.length < TETO) {
-    const primeira = linhas.length === 0;
-    const { data, error, count } = await supabase
+  const supabase = authz.supabase;
+  const consultaDeDestinatarios = () =>
+    supabase
       .from("campaign_recipients")
       .select(
-        "status, eligibility_status, sent_at, delivered_at, read_at, replied_at, opted_out_at",
-        primeira ? { count: "exact" } : undefined,
+        "id, status, eligibility_status, sent_at, delivered_at, read_at, replied_at, opted_out_at",
       )
-      .eq("organization_id", authz.org.orgId)
+      .eq("organization_id", org.orgId)
       .eq("campaign_id", id)
-      // Sem ordem estável, duas páginas podem repetir ou pular linhas.
-      .order("id", { ascending: true })
-      .range(linhas.length, linhas.length + TAMANHO_DA_PAGINA - 1);
+      .order("id", { ascending: true });
+
+  const linhas: LinhaDeDestinatario[] = [];
+  let cursor: string | null = null;
+  let parcial = false;
+  while (linhas.length < TETO) {
+    let consulta = consultaDeDestinatarios().limit(
+      Math.min(TAMANHO_DA_PAGINA, TETO - linhas.length),
+    );
+    if (cursor) consulta = consulta.gt("id", cursor);
+    const { data, error } = await consulta;
     if (error) return fail("internal_error", error.message, 500, { requestId });
-    if (primeira) total = count;
-    const lote = (data ?? []) as unknown as LinhaDeDestinatario[];
+    const lote = (data ?? []) as LinhaDeDestinatario[];
+    if (lote.length === 0) break;
+    const ultimoId = lote[lote.length - 1]!.id;
+    if (cursor && ultimoId <= cursor) {
+      return fail("internal_error", "campaign_metrics_page_did_not_advance", 500, { requestId });
+    }
     linhas.push(...lote);
-    if (lote.length === 0 || (total !== null && linhas.length >= total)) {
-      parcial = false;
-      break;
+    cursor = ultimoId;
+    if (linhas.length === TETO) {
+      // Mesmo recorte e ordem da leitura. A sonda não entra nas contagens:
+      // exatamente 20.000 não é parcial; uma linha além deles prova o corte.
+      const { data: sobra, error: erroSobra } = await consultaDeDestinatarios()
+        .gt("id", cursor)
+        .limit(1);
+      if (erroSobra) return fail("internal_error", erroSobra.message, 500, { requestId });
+      parcial = (sobra ?? []).length > 0;
     }
   }
 
@@ -91,7 +110,7 @@ export async function GET(
     const { data: existe } = await supabase
       .from("campaigns")
       .select("id")
-      .eq("organization_id", authz.org.orgId)
+      .eq("organization_id", org.orgId)
       .eq("id", id)
       .maybeSingle();
     if (!existe) {
