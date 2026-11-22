@@ -30,6 +30,29 @@ describe("host observation of applicable running services", () => {
     expect(newerOfficialRelease("aabbcc", "v1.90.0")).toBeNull();
   });
 
+  it("confirma e ordena a versão de uma distribuição derivada (`1.2.3-<nome>.N`)", () => {
+    // A imagem da distribuição Flux reporta APP_VERSION=1.123.0-flux.2; antes,
+    // o schema a recusava e a tela ficava em "Versão instalada: ?".
+    expect(identity(confirmedRuntime("1.123.0-flux.2", at))).toMatchObject({
+      status: "confirmed",
+      customized: false,
+      base_version: "1.123.0-flux.2",
+    });
+    expect(newerOfficialRelease("1.123.0-flux.2", "v1.123.0-flux.3")).toBe(true);
+    expect(newerOfficialRelease("1.123.0-flux.2", "v1.123.0-flux.2")).toBe(false);
+    expect(newerOfficialRelease("1.123.0-flux.10", "v1.123.0-flux.9")).toBe(false);
+    expect(newerOfficialRelease("1.123.0-flux.2", "v1.124.0-flux.1")).toBe(true);
+    expect(newerOfficialRelease("1.124.0-flux.1", "v1.123.0-flux.9")).toBe(false);
+    // A distribuição nasce DEPOIS da base: subir para ela é ir para frente.
+    expect(newerOfficialRelease("1.123.0", "v1.123.0-flux.1")).toBe(true);
+    expect(newerOfficialRelease("1.123.0-flux.1", "v1.123.0")).toBe(false);
+    // Distribuições diferentes sobre a mesma base: não há ordem.
+    expect(newerOfficialRelease("1.123.0-flux.1", "v1.123.0-outra.2")).toBeNull();
+    // Sufixo fora do formato continua recusado.
+    expect(newerOfficialRelease("1.123.0-rc1", "v1.124.0")).toBeNull();
+    expect(newerOfficialRelease("1.123.0-Flux.1", "v1.124.0")).toBeNull();
+  });
+
   it.each(["revision", "base_version", "base_revision"] as const)(
     "does not confirm divergent %s",
     (field) => {

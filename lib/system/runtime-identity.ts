@@ -4,7 +4,15 @@ import { z } from "zod";
 export const RUNTIME_MAX_AGE_MS = 15 * 60_000;
 const sha = z.string().regex(/^[a-f0-9]{40,64}$/);
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-const release = z.string().regex(/^v?\d+\.\d+\.\d+$/);
+/**
+ * Versão publicada: `1.2.3`, ou a de uma distribuição derivada sobre ela,
+ * `1.2.3-<nome>.N` (a distribuição Flux publica `1.123.0-flux.2`). O sufixo NÃO
+ * é pré-release do semver: é uma publicação POSTERIOR à base, construída sobre
+ * ela. Sem aceitá-lo, a imagem da distribuição nunca era confirmada — a tela
+ * mostrava "?" e o botão de atualizar recusava toda versão seguinte.
+ */
+const RELEASE_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([a-z][a-z0-9]*)\.(\d+))?$/;
+const release = z.string().regex(RELEASE_RE);
 
 export const runtimeConfirmationSchema = z.object({
   schema: z.literal(1),
@@ -146,15 +154,24 @@ export function failureSupersededByRuntime(
 
 /** Published release comparison, independent of the checkout used by cron. */
 export function newerOfficialRelease(installed: string, latest: string): boolean | null {
-  if (!release.safeParse(installed).success || !release.safeParse(latest).success) return null;
-  const a = installed.replace(/^v/, "").split(".").map(BigInt);
-  const b = latest.replace(/^v/, "").split(".").map(BigInt);
-  for (const [index, value] of a.entries()) {
-    const other = b[index];
-    if (other === undefined) return null;
-    if (value !== other) return other > value;
+  const a = installed.match(RELEASE_RE);
+  const b = latest.match(RELEASE_RE);
+  if (!a || !b) return null;
+  for (const index of [1, 2, 3]) {
+    const x = BigInt(a[index]!);
+    const y = BigInt(b[index]!);
+    if (x !== y) return y > x;
   }
-  return false;
+  // Mesma base. A distribuição é publicada DEPOIS da base sobre a qual nasce:
+  // `1.2.3` → `1.2.3-flux.1` é ir para frente, e o contrário é voltar.
+  const [distA, nA] = [a[4], a[5]];
+  const [distB, nB] = [b[4], b[5]];
+  if (!distA && !distB) return false;
+  if (!distA) return true;
+  if (!distB) return false;
+  // Duas distribuições diferentes sobre a mesma base não têm ordem entre si.
+  if (distA !== distB) return null;
+  return BigInt(nB!) > BigInt(nA!);
 }
 
 /** A capacidade vem do agente em execução e só vale com identidade oficial recente. */

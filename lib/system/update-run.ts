@@ -271,7 +271,9 @@ function semPrefixoV(versao: string): string {
 
 /**
  * O nome aponta para uma VERSÃO PUBLICADA — `1.33.0` e `v1.33.0` valem; uma
- * marca de desenvolvimento (SHA, `dev-...`) não.
+ * marca de desenvolvimento (SHA, `dev-...`) não. A versão de uma distribuição
+ * derivada, `1.33.0-<nome>.N` (ex.: `1.123.0-flux.2`), também é publicada: tem
+ * imagem no registro dela e é para ela que a volta precisa poder apontar.
  *
  * É o critério do `--force` com alvo: só existe imagem publicada para uma
  * versão publicada, então só ela admite "voltar para a versão anterior" com
@@ -280,7 +282,7 @@ function semPrefixoV(versao: string): string {
  * nunca discordarem sobre o que é uma versão.
  */
 export function ehVersaoPublicada(versao: string | null | undefined): boolean {
-  return /^\d+\.\d+\.\d+$/.test(semPrefixoV(versao ?? ""));
+  return /^\d+\.\d+\.\d+(?:-[a-z][a-z0-9]*\.\d+)?$/.test(semPrefixoV(versao ?? ""));
 }
 
 /** APP_VERSION corroborates a later host observation; it never replaces it. */

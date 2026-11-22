@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canTransition,
+  ehVersaoPublicada,
   isRunStale,
   rollbackDesmentidoPeloApp,
   rollbackFoiSuperado,
@@ -233,5 +234,18 @@ describe("rollbackDesmentidoPeloApp", () => {
     );
     expect(rollbackDesmentidoPeloApp({ status: "failed_rolled_back" }, "1.33.0")).toBe(false);
     expect(rollbackDesmentidoPeloApp(null, "1.33.0")).toBe(false);
+  });
+});
+
+describe("ehVersaoPublicada", () => {
+  it("aceita a versão da base e a de uma distribuição derivada; recusa marca de desenvolvimento", () => {
+    expect(ehVersaoPublicada("1.33.0")).toBe(true);
+    expect(ehVersaoPublicada("v1.33.0")).toBe(true);
+    expect(ehVersaoPublicada("1.123.0-flux.2")).toBe(true);
+    expect(ehVersaoPublicada("v1.123.0-flux.2")).toBe(true);
+    expect(ehVersaoPublicada("d6a4fc7")).toBe(false);
+    expect(ehVersaoPublicada("dev-123")).toBe(false);
+    expect(ehVersaoPublicada("1.123.0-rc1")).toBe(false);
+    expect(ehVersaoPublicada(null)).toBe(false);
   });
 });
