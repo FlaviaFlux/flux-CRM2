@@ -71,6 +71,12 @@ describe("o BUILD_ID do servidor é conferido contra o de .next/static (#4967)",
     expect(job).toMatch(/steps\.build\.outputs\.digest/);
     // Só o app tem `next build`.
     expect(job).toMatch(/matrix\.name == 'deskcommcrm'/);
+    // A referência da imagem vai com o dono em minúsculas: Docker recusa maiúscula
+    // (rc=125, "repository name must be lowercase"), e num fork cujo dono tem
+    // maiúscula a sonda barrava toda publicação sem medir nada.
+    const chamada = job.slice(job.indexOf("bash scripts/verifica-build-id.sh"));
+    expect(chamada.split("\n").slice(0, 2).join("\n")).not.toContain("github.repository_owner");
+    expect(job).toMatch(/tr '\[:upper:\]' '\[:lower:\]'/);
   });
 
   it("os dois passos preservam o teto de heap do repo", () => {
