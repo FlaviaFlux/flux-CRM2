@@ -282,13 +282,13 @@ describe("o endereço passa pelo guard anti-SSRF já no cadastro (item 4)", () =
 // ─── Item 5: sem segredo no endereço ────────────────────────────────────────
 
 describe("o endereço não carrega segredo para a trilha (item 5)", () => {
-  it("querystring é recusada no cadastro — `?token=` não vira dado eterno", async () => {
+  it("querystring é aceita no cadastro — a trilha grava só o host (ex.: Stays `?clientId=`)", async () => {
     const resultado = await definirServidorMcpExterno({
-      endpoint: "https://erp.loja/mcp?token=super-secreto",
+      endpoint: "https://erp.loja/mcp?clientId=abc",
       chave: CHAVE,
     });
-    expect(resultado).toEqual({ ok: false, error: "endpoint_inseguro" });
-    expect(estado.updates).toEqual([]);
+    expect(resultado).toEqual({ ok: true, chaveUltimos4: "abcd" });
+    expect(estado.updates).toHaveLength(1);
   });
 
   it("fragmento é recusado no cadastro", async () => {
