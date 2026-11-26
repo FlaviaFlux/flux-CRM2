@@ -22,12 +22,13 @@
  *
  * ── O que é validado na LEITURA ─────────────────────────────────────────────
  *
- * Endpoint http(s), sem usuário/senha embutido e SEM querystring nem
- * fragmento (item 5): um ERP que autentica por `?token=` deixaria o segredo no
- * `api_audit_log` (append-only) e no `logger.warn` de `carregar.ts`. A
- * credencial do ERP é a `chave`, e ela agora mora cifrada. Bolso malformado vira
- * `null`, e `null` significa "não há servidor registrado": o turno segue
- * exatamente como antes, sem abrir rede nenhuma.
+ * Endpoint http(s), sem usuário/senha embutido e SEM fragmento (item 5).
+ * Query string é aceita: servidores MCP como o da Stays autenticam por
+ * `?clientId=`, e o audit_log registra SÓ o host (`hostDoEndpoint`), então
+ * o parâmetro não vaza para trilha nem para log. A credencial sensível
+ * (quando houver) continua na coluna cifrada. Bolso malformado vira `null`,
+ * e `null` significa "não há servidor registrado": o turno segue exatamente
+ * como antes, sem abrir rede nenhuma.
  */
 import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 
@@ -55,10 +56,11 @@ function ehEndpointValido(endpoint: unknown): endpoint is string {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return false;
   if (url.username !== "" || url.password !== "") return false;
-  // SEGREDO NO ENDEREÇO (item 5): `?token=` e `#...` seriam gravados no bolso,
-  // levados para o `api_audit_log` (append-only) e para o log de erro. Recusar
-  // aqui é a única porta que não depende de lembrar em cada consumidor.
-  if (url.search !== "" || url.hash !== "") return false;
+  // FRAGMENTO NO ENDEREÇO: `#...` não faz sentido num endpoint de servidor.
+  // Query string é aceita: servidores MCP como o da Stays autenticam por
+  // ?clientId= na URL. O audit_log registra só o host (hostDoEndpoint),
+  // não a URL completa, então o parâmetro não vaza.
+  if (url.hash !== "") return false;
   return true;
 }
 
