@@ -255,11 +255,12 @@ describe("registro em organizations.settings.mcp_externo (#2147)", () => {
     expect(lerEndpointMcpExterno({ mcp_externo: { endpoint: 12 } })).toBeNull();
   });
 
-  it("endereço com SEGREDO DENTRO não é registrável (item 5)", () => {
-    // `?token=`, `#` e `user:senha` virariam dado eterno na trilha append-only e
-    // no logger — a doutrina do repo proíbe chave em query string, e aqui ela
-    // nem chega a ser gravada.
-    expect(lerEndpointMcpExterno({ mcp_externo: { endpoint: "https://erp.loja/mcp?token=abc" } })).toBeNull();
+  it("endereço com fragmento ou user:senha não é registrável; query string é aceita (item 5)", () => {
+    // Query string é aceita (ex.: Stays autentica por `?clientId=`): a trilha e
+    // o log gravam SÓ o host (`hostDoEndpoint`). `#` e `user:senha` seguem recusados.
+    expect(lerEndpointMcpExterno({ mcp_externo: { endpoint: "https://erp.loja/mcp?clientId=abc" } })).toBe(
+      "https://erp.loja/mcp?clientId=abc",
+    );
     expect(lerEndpointMcpExterno({ mcp_externo: { endpoint: "https://erp.loja/mcp#abc" } })).toBeNull();
     expect(lerEndpointMcpExterno({ mcp_externo: { endpoint: "***@erp.loja/mcp" } })).toBeNull();
   });
