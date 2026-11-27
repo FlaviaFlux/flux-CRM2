@@ -18694,8 +18694,8 @@ export const DICIONARIO: Traducoes = {
   "O endereço e a chave do sistema de fora que a IA da empresa pode consultar.": {
     es: "La dirección y la clave del sistema externo que la IA de la empresa puede consultar.",
   },
-  "O endereço e a chave do sistema de fora que a IA desta empresa pode consultar. Só o dono da instalação vê esta tela.": {
-    es: "La dirección y la clave del sistema externo que la IA de esta empresa puede consultar. Solo el dueño de la instalación ve esta pantalla.",
+  "O endereço e a chave do sistema de fora que a IA desta empresa pode consultar. Quem administra a empresa vê esta tela.": {
+    es: "La dirección y la clave del sistema externo que la IA de esta empresa puede consultar. Quien administra la empresa ve esta pantalla.",
   },
   "Endereço e chave": { es: "Dirección y clave" },
   "O endereço precisa ser um servidor público em https. Rede interna, localhost e segredo colado no endereço são recusados na hora de salvar.": {

@@ -12,10 +12,10 @@
  *
  * ── Por quem passa ──────────────────────────────────────────────────────────
  *
- * Pela MESMA regra de quem cadastra (`regraPlatformAdmin`), por duas razões: a
- * lista entrega o host do endpoint e os nomes de tool do ERP — dado do dono da
- * instalação, não da empresa —, e cada organização enxerga só o registro da
- * própria linha. O `endpoint` volta SÓ como host, a mesma régua da trilha de
+ * Pela MESMA regra de quem cadastra (`podeAdministrarEmpresa`, sem sessão de
+ * suporte), por duas razões: a lista entrega o host do endpoint e os nomes de
+ * tool do ERP — dado de quem administra a empresa, não de qualquer membro —, e
+ * cada organização enxerga só o registro da própria linha. O `endpoint` volta SÓ como host, a mesma régua da trilha de
  * auditoria (item 5): endereço inteiro não sai daqui.
  *
  * ── Por que um tool_id carrega a MARCA ──────────────────────────────────────
@@ -27,8 +27,8 @@
  * aparece para ferramenta que o servidor DECLAROU, e a marca final é sempre do
  * administrador, nunca do servidor remoto.
  */
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { regraPlatformAdmin } from "@/lib/extensions/http";
+import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { supportWriteError } from "@/lib/impersonate/support";
 import { carregarServidorMcpExterno } from "@/lib/mcp/servidor-externo/carregar";
 import { toolIdRemoto, type MarcaRemota } from "@/lib/mcp/servidor-externo/ids";
@@ -68,21 +68,12 @@ export async function listarFerramentasMcpExternas(): Promise<ResultadoDaListage
   // instalação — dado que uma sessão emprestada não existe para enxergar.
   if (supportWriteError(user.support)) return { ok: false, error: "forbidden_role" };
 
-  const regra = await regraPlatformAdmin(user);
-  if (!regra.ok) {
-    return {
-      ok: false,
-      error:
-        regra.codigo === "upstream_unavailable"
-          ? "upstream_unavailable"
-          : regra.codigo === "mfa_required"
-            ? "mfa_required"
-            : "forbidden_role",
-    };
-  }
+  if (user.support) return { ok: false, error: "forbidden_role" };
 
   const org = await resolveActiveOrg(user);
   if (!org) return { ok: false, error: "forbidden_tenant" };
+  if (!podeAdministrarEmpresa(user, org)) return { ok: false, error: "forbidden_role" };
+  if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   // `null` cobre os três motivos de não haver o que listar: sem registro, turno
   // com contato (que não é o caso aqui) e servidor que não respondeu.

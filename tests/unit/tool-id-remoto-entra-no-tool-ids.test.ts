@@ -13,9 +13,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const estado = vi.hoisted(() => ({
   usuario: null as Record<string, unknown> | null,
-  org: { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa" } as {
+  org: { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa", role: "admin" } as {
     orgId: string;
     name: string;
+    role: string;
   } | null,
   montado: null as unknown,
 }));
@@ -158,7 +159,7 @@ describe("o editor do agente lista o que o servidor remoto oferece", () => {
       support: null,
       idioma: "pt",
     };
-    estado.org = { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa" };
+    estado.org = { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa", role: "admin" };
     estado.montado = {
       servidor: { endpoint: "https://erp.loja:8443/mcp/v1/pedidos", chave: "segredo" },
       ferramentas: [
@@ -173,8 +174,19 @@ describe("o editor do agente lista o que o servidor remoto oferece", () => {
     expect(await listarFerramentasMcpExternas()).toEqual({ ok: false, error: "unauthenticated" });
   });
 
-  it("quem não é dono da instalação não recebe nem os nomes das tools", async () => {
+  it("quem não administra a empresa não recebe nem os nomes das tools", async () => {
     estado.usuario = { id: "u", is_platform_admin: false, support: null, idioma: "pt" };
+    estado.org = { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa", role: "agent" };
+    expect(await listarFerramentasMcpExternas()).toEqual({ ok: false, error: "forbidden_role" });
+  });
+
+  it("o administrador da própria empresa lista, sem ser dono da plataforma", async () => {
+    estado.usuario = { id: "u", is_platform_admin: false, support: null, idioma: "pt" };
+    expect((await listarFerramentasMcpExternas()).ok).toBe(true);
+  });
+
+  it("sessão de suporte não lista, mesmo com papel de administrador", async () => {
+    estado.usuario = { id: "u", is_platform_admin: false, support: { ativo: true }, idioma: "pt" };
     expect(await listarFerramentasMcpExternas()).toEqual({ ok: false, error: "forbidden_role" });
   });
 

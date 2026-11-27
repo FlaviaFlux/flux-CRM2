@@ -24,10 +24,12 @@ const estado = vi.hoisted(() => {
   process.env.AI_CRED_AES_KEY = "iBc1Z2gYaAH4rEHs1dHQ2dvNQ6t4OfrdE1/Y6OSvtZY=";
   return {
     usuario: null as Record<string, unknown> | null,
-    org: { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa" } as {
+    org: { orgId: "0be7a70c-0000-4000-8000-000000000001", name: "Org Ativa", role: "admin" } as {
       orgId: string;
       name: string;
+      role: string;
     } | null,
+    mfaEmDivida: false,
     aal: "aal2" as string,
     plataforma: { scope: "full", mfa_required: false } as {
       scope: string;
@@ -45,7 +47,7 @@ const estado = vi.hoisted(() => {
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: vi.fn(async () => estado.usuario),
   resolveActiveOrg: vi.fn(async () => estado.org),
-  mfaEmDivida: vi.fn(async () => false),
+  mfaEmDivida: vi.fn(async () => estado.mfaEmDivida),
   mfaEmDividaEstrita: vi.fn(async () => false),
   sessionAal: vi.fn(async () => estado.aal),
 }));
@@ -119,7 +121,8 @@ function adminDaInstalacao() {
 
 beforeEach(() => {
   estado.usuario = { id: "11111111-1111-4111-8111-111111111111", is_platform_admin: true, support: null, idioma: "pt" };
-  estado.org = { orgId: ORG, name: "Org Ativa" };
+  estado.org = { orgId: ORG, name: "Org Ativa", role: "admin" };
+  estado.mfaEmDivida = false;
   estado.aal = "aal2";
   estado.plataforma = { scope: "full", mfa_required: false };
   estado.plataformaErro = null;
@@ -132,7 +135,7 @@ beforeEach(() => {
 
 // ─── Item 1: quem cadastra ───────────────────────────────────────────────────
 
-describe("quem cadastra é o dono da instalação, e o gate vem antes da forma (item 1)", () => {
+describe("quem cadastra é quem administra a empresa, e o gate vem antes da forma (item 1)", () => {
   it("sem sessão: unauthenticated", async () => {
     estado.usuario = null;
     expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
@@ -141,46 +144,64 @@ describe("quem cadastra é o dono da instalação, e o gate vem antes da forma (
     });
   });
 
-  it("quem não é platform admin recebe RECUSA DE PERMISSÃO mesmo com a forma inválida", async () => {
+  it("administrador da PRÓPRIA empresa grava, sem ser dono da plataforma", async () => {
     estado.usuario = { id: "u", is_platform_admin: false, support: null, idioma: "pt" };
-    // Entrada malformada de propósito: se o `safeParse` roda antes, isto vira
-    // `validation_failed` e o operador aprende a regra errada.
-    const resultado = await definirServidorMcpExterno({ endpoint: 123 } as never);
-    expect(resultado).toEqual({ ok: false, error: "forbidden_role" });
+    estado.org = { orgId: ORG, name: "Org Ativa", role: "admin" };
+    expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
+      ok: true,
+      chaveUltimos4: "abcd",
+    });
+    expect(estado.updates).toHaveLength(1);
+  });
+
+  it.each(["viewer", "agent", "manager"])(
+    "papel %s é recusado, mesmo com a forma inválida (a permissão vem antes da forma)",
+    async (role) => {
+      estado.usuario = { id: "u", is_platform_admin: false, support: null, idioma: "pt" };
+      estado.org = { orgId: ORG, name: "Org Ativa", role };
+      // Entrada malformada de propósito: se o `safeParse` roda antes, isto vira
+      // `validation_failed` e o operador aprende a regra errada.
+      const resultado = await definirServidorMcpExterno({ endpoint: 123 } as never);
+      expect(resultado).toEqual({ ok: false, error: "forbidden_role" });
+      expect(estado.updates).toEqual([]);
+    },
+  );
+
+  it("sessão de suporte é recusada, mesmo com papel de administrador", async () => {
+    estado.usuario = { id: "u", is_platform_admin: false, support: { ativo: true }, idioma: "pt" };
+    expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
+      ok: false,
+      error: "forbidden_role",
+    });
     expect(estado.updates).toEqual([]);
   });
 
-  it("sessão de suporte é recusada pela MESMA regra das extensões", async () => {
-    estado.usuario = { id: "u", is_platform_admin: true, support: { ativo: true }, idioma: "pt" };
-    expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
-      ok: false,
-      error: "forbidden_role",
-    });
+  it("o dono da plataforma com escopo `full` administra a empresa em que é membro", async () => {
+    estado.usuario = {
+      id: "u",
+      is_platform_admin: true,
+      platform_admin_scope: "full",
+      support: null,
+      idioma: "pt",
+    };
+    estado.org = { orgId: ORG, name: "Org Ativa", role: "viewer" };
+    expect((await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).ok).toBe(true);
   });
 
-  it("escopo que não é `full` é recusado", async () => {
-    estado.plataforma = { scope: "leitura", mfa_required: false };
-    expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
-      ok: false,
-      error: "forbidden_role",
-    });
-  });
-
-  it("a plataforma cobra `aal2` quando a política dela pede", async () => {
-    estado.plataforma = { scope: "full", mfa_required: true };
-    estado.aal = "aal1";
+  it("quem tem a verificação em dívida recebe mfa_required", async () => {
+    estado.mfaEmDivida = true;
     expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
       ok: false,
       error: "mfa_required",
     });
+    expect(estado.updates).toEqual([]);
   });
 
-  it("a recusa de permissão vem ANTES da organização ativa", async () => {
-    estado.usuario = { id: "u", is_platform_admin: false, support: null, idioma: "pt" };
+  it("sem organização ativa: forbidden_tenant", async () => {
     estado.org = null;
     expect(await definirServidorMcpExterno({ endpoint: "https://erp.loja/mcp", chave: CHAVE })).toEqual({
       ok: false,
-      error: "forbidden_role",
+      error: "forbidden_tenant",
     });
   });
 
