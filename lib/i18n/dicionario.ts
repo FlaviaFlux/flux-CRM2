@@ -18701,8 +18701,8 @@ export const DICIONARIO: Traducoes = {
   "O endereço precisa ser um servidor público em https. Rede interna, localhost e segredo colado no endereço são recusados na hora de salvar.": {
     es: "La dirección debe ser un servidor público en https. Una red interna, localhost y un secreto pegado en la dirección se rechazan al guardar.",
   },
-  "A chave é gravada cifrada e não é mostrada de novo: depois de salvar, a tela revela só os quatro últimos caracteres.": {
-    es: "La clave se guarda cifrada y no se muestra de nuevo: después de guardar, la pantalla revela solo los cuatro últimos caracteres.",
+  "A chave é gravada cifrada e não é mostrada de novo: depois de salvar, a tela revela só os quatro últimos caracteres. Deixe em branco se o servidor autentica pela URL (ex.: ?clientId=). A chave, quando preenchida, é enviada como Bearer token.": {
+    es: "La clave se guarda cifrada y no se muestra de nuevo: después de guardar, la pantalla revela solo los cuatro últimos caracteres. Déjala en blanco si el servidor se autentica por la URL (ej.: ?clientId=). La clave, cuando se completa, se envía como Bearer token.",
   },
   "Remover apaga o endereço e a chave desta empresa: a IA deixa de alcançar o servidor de fora.": {
     es: "Eliminar borra la dirección y la clave de esta empresa: la IA deja de alcanzar el servidor externo.",
@@ -18733,8 +18733,8 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível salvar. Tente de novo em instantes.": {
     es: "No fue posible guardar. Inténtalo de nuevo en unos momentos.",
   },
-  "Preencha o endereço e a chave para salvar. Para apagar o registro, use Remover.": {
-    es: "Completa la dirección y la clave para guardar. Para borrar el registro, usa Quitar.",
+  "Preencha o endereço para salvar. Para apagar o registro, use Remover.": {
+    es: "Completa la dirección para guardar. Para borrar el registro, usa Quitar.",
   },
   "Nenhum servidor externo respondeu. Salve o endereço e a chave e teste de novo.": {
     es: "Ningún servidor externo respondió. Guarda la dirección y la clave y prueba de nuevo.",

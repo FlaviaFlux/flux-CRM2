@@ -119,11 +119,12 @@ export function CadastroDoServidorMcpExterno({ liberadasIniciais = "" }: { liber
 
   function salvar() {
     limparRetrato();
-    // Endereço OU chave vazios são o contrato de APAGAR da action — "Salvar"
-    // com um dos dois em branco removeria o registro e anunciaria "salva".
-    // Apagar tem botão próprio; aqui o vazio é recusa de formulário.
-    if (endpoint.trim() === "" || chave.trim() === "") {
-      setErro(t("Preencha o endereço e a chave para salvar. Para apagar o registro, use Remover."));
+    // Endereço vazio é o contrato de APAGAR da action — "Salvar" sem endereço
+    // removeria o registro e anunciaria "salva". Apagar tem botão próprio; aqui
+    // o vazio é recusa de formulário. A chave PODE ficar vazia: servidores que
+    // autenticam pela URL (ex.: `?clientId=`) não usam Bearer.
+    if (endpoint.trim() === "") {
+      setErro(t("Preencha o endereço para salvar. Para apagar o registro, use Remover."));
       return;
     }
     iniciar(async () => {
@@ -213,7 +214,7 @@ export function CadastroDoServidorMcpExterno({ liberadasIniciais = "" }: { liber
             />
             <p className="text-xs text-muted-foreground">
               {t(
-                "A chave é gravada cifrada e não é mostrada de novo: depois de salvar, a tela revela só os quatro últimos caracteres.",
+                "A chave é gravada cifrada e não é mostrada de novo: depois de salvar, a tela revela só os quatro últimos caracteres. Deixe em branco se o servidor autentica pela URL (ex.: ?clientId=). A chave, quando preenchida, é enviada como Bearer token.",
               )}
             </p>
           </div>
