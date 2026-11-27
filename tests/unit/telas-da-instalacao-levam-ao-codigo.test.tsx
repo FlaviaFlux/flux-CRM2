@@ -1,7 +1,7 @@
 /**
  * AS TELAS DA INSTALAÇÃO EM `/app` LEVAM AO CÓDIGO ANTES DE ABRIR (#3200).
  *
- * As ações de Extensões, do Servidor MCP externo e da Atualização do sistema
+ * As ações de Extensões e da Atualização do sistema
  * usam a régua ESTRITA (`regraPlatformAdmin` / `requirePlatformAdminEscrita` →
  * `mfaEmDividaEstrita`): só o código provado nesta
  * sessão vale. A casca de `/app` usa a branda, que aceita o dispositivo
@@ -97,12 +97,6 @@ async function extensoes() {
   return Pagina();
 }
 
-async function servidorMcp() {
-  h.caminho = "/app/settings/servidor-mcp-externo";
-  const { default: Pagina } = await import("@/app/app/settings/servidor-mcp-externo/page");
-  return Pagina();
-}
-
 async function atualizacao() {
   h.caminho = "/app/settings/atualizacao";
   const { default: Pagina } = await import("@/app/app/settings/atualizacao/page");
@@ -120,13 +114,6 @@ describe("dono da instalação que entrou pelo dispositivo confiável", () => {
     await expect(extensoes()).rejects.toThrow("REDIRECT:/login/mfa?next=%2Fapp%2Fextensions");
   });
 
-  it("Servidor MCP externo leva ao código, de volta para a própria tela", async () => {
-    sessao("aal1");
-    await expect(servidorMcp()).rejects.toThrow(
-      "REDIRECT:/login/mfa?next=%2Fapp%2Fsettings%2Fservidor-mcp-externo",
-    );
-  });
-
   it("Atualização do sistema leva ao código, de volta para a própria tela", async () => {
     sessao("aal1");
     await expect(atualizacao()).rejects.toThrow(
@@ -139,7 +126,6 @@ describe("controles: quem não deve ir ao código abre a tela", () => {
   it("o dono com o código provado nesta sessão (aal2)", async () => {
     sessao("aal2");
     await expect(extensoes()).resolves.toBeTruthy();
-    await expect(servidorMcp()).resolves.toBeTruthy();
     await expect(atualizacao()).resolves.toBeTruthy();
   });
 

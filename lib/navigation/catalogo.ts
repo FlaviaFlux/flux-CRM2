@@ -1363,13 +1363,9 @@ export const NAV_CATALOG = [
     // SEM `sidebar`, como as duas vizinhas: trocar a credencial de um ERP é
     // tarefa de uma vez, e o hub + o ⌘K já são porta suficiente.
     //
-    // ⚠️ `minRole: "admin"` é o mais perto que este registro chega do que a
-    // tela cobra: quem ESCREVE é o dono da INSTALAÇÃO (`is_platform_admin`, a
-    // `regraPlatformAdmin` da action), e o catálogo não modela esse papel — a
-    // mesma limitação que a allowlist de `/app/settings/atualizacao` já
-    // registra em `tests/unit/navegacao-completude.test.ts`. Quem clicar sem a
-    // permissão recebe `/403` da própria tela; a porta existe porque a tela
-    // nova precisa de por onde ser encontrada (item 14 da Definition of Done).
+    // `minRole: "admin"` é a régua da tela e das actions (`podeAdministrarEmpresa`):
+    // quem administra a empresa configura o servidor dela, sem passar pelo
+    // suporte. Quem clicar sem a permissão recebe `/403` da própria tela.
     href: "/app/settings/servidor-mcp-externo",
     label: "Servidor MCP externo",
     description: "O endereço e a chave do sistema de fora que a IA da empresa pode consultar.",
