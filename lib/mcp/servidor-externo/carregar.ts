@@ -199,12 +199,21 @@ export async function carregarServidorMcpExterno(
   } | null;
 
   const endpoint = lerEndpointMcpExterno(linha?.settings);
-  const chave = abrirChaveMcpExterno({
-    mcp_externo_chave_encrypted: linha?.mcp_externo_chave_encrypted as string | undefined,
-    mcp_externo_chave_iv: linha?.mcp_externo_chave_iv as string | undefined,
-    mcp_externo_chave_tag: linha?.mcp_externo_chave_tag as string | undefined,
-  });
-  if (!endpoint || !chave) return null;
+  if (!endpoint) return null;
+  // Sem coluna cifrada = registro SEM chave (servidor que autentica pela URL):
+  // segue com chave vazia, e a chamada não envia Bearer. Coluna presente que não
+  // abre (chave de cifra trocada, dado corrompido) continua sendo "sem servidor"
+  // — enviar a chamada sem a credencial que o dono cadastrou seria mudar de
+  // autenticação em silêncio.
+  const semChaveGravada = linha?.mcp_externo_chave_encrypted == null;
+  const chave = semChaveGravada
+    ? ""
+    : abrirChaveMcpExterno({
+        mcp_externo_chave_encrypted: linha?.mcp_externo_chave_encrypted as string | undefined,
+        mcp_externo_chave_iv: linha?.mcp_externo_chave_iv as string | undefined,
+        mcp_externo_chave_tag: linha?.mcp_externo_chave_tag as string | undefined,
+      });
+  if (chave === null) return null;
   const servidor: ServidorMcpExterno = { endpoint, chave };
 
   const contato = opcoes?.contatoDoTurno;

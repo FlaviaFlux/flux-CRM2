@@ -114,8 +114,8 @@ export function conferirEndpointSeguro(endpoint: string): void {
  * Merge em dois níveis: lê, troca SÓ `mcp_externo` e grava o objeto inteiro de
  * volta — os outros bolsos de `settings` saem daqui como entraram.
  *
- * VAZIO APAGA (o contrato de formulário): endpoint ou chave em branco removem a
- * chave inteira, porque deixar `{}` seria um registro que a leitura enxerga como
+ * VAZIO APAGA (o contrato de formulário): o ENDEREÇO em branco remove a
+ * chave inteira (a chave em branco NÃO apaga: o servidor pode autenticar pela URL), porque deixar `{}` seria um registro que a leitura enxerga como
  * presente e o turno recusa — metade ligada, sem ninguém para dizer qual metade.
  *
  * A `chave` da entrada NÃO é gravada aqui: este função devolve só o jsonb, e o
@@ -132,8 +132,7 @@ export function mesclarServidorMcpExterno(
       : {};
 
   const endpoint = entrada.endpoint.trim();
-  const chave = entrada.chave.trim();
-  if (endpoint === "" || chave === "") {
+  if (endpoint === "") {
     delete atual[BOLSO_MCP_EXTERNO];
     return atual;
   }

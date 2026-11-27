@@ -195,6 +195,22 @@ describe("quem cadastra é o dono da instalação, e o gate vem antes da forma (
   });
 });
 
+describe("chave em branco é registro SEM chave, não remoção", () => {
+  it("endereço preenchido e chave vazia grava o bolso e zera as colunas cifradas", async () => {
+    adminDaInstalacao();
+    const resultado = await definirServidorMcpExterno({
+      endpoint: "https://erp.loja/mcp?clientId=abc",
+      chave: "",
+    });
+    expect(resultado).toEqual({ ok: true, chaveUltimos4: null });
+    expect(estado.updates).toHaveLength(1);
+    const payload = estado.updates[0]!;
+    const settings = payload.settings as Record<string, unknown>;
+    expect(settings.mcp_externo).toEqual({ endpoint: "https://erp.loja/mcp?clientId=abc" });
+    expect(payload.mcp_externo_chave_encrypted).toBeNull();
+  });
+});
+
 // ─── Item 2: por organização ─────────────────────────────────────────────────
 
 describe("o registro é da ORGANIZAÇÃO da sessão, nunca do corpo do pedido (item 2)", () => {

@@ -246,6 +246,11 @@ describe("registro em organizations.settings.mcp_externo (#2147)", () => {
     expect(lerEndpointMcpExterno(gravado)).toBeNull();
   });
 
+  it("chave em branco com endereço NÃO apaga: o servidor pode autenticar pela URL", () => {
+    const gravado = mesclarServidorMcpExterno({}, { endpoint: "https://erp.loja/mcp?clientId=abc", chave: "" });
+    expect(lerEndpointMcpExterno(gravado)).toBe("https://erp.loja/mcp?clientId=abc");
+  });
+
   it("a leitura recusa o que não dá para chamar: sem registro, URL que não é http(s)", () => {
     expect(lerEndpointMcpExterno(undefined)).toBeNull();
     expect(lerEndpointMcpExterno(null)).toBeNull();

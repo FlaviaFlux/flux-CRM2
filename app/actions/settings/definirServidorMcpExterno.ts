@@ -121,7 +121,12 @@ export async function definirServidorMcpExterno(
 
   const endpoint = entrada.data.endpoint.trim();
   const chave = entrada.data.chave.trim();
-  const apagando = endpoint === "" || chave === "";
+  // Apagar o registro só quando o ENDEREÇO está vazio. Chave vazia é válida:
+  // servidores que autenticam pela URL (ex.: `?clientId=`) não querem Bearer, e
+  // exigir chave impedia o cadastro deles. Sem chave, nenhum cabeçalho de
+  // autorização é enviado (`chamada.ts`).
+  const apagando = endpoint === "";
+  const temChave = chave !== "";
 
   // 3) Anti-SSRF no CADASTRO (item 4). Endpoint vazio não passa por aqui: ele
   // é o contrato de apagar, não um endereço a chamar.
@@ -166,7 +171,7 @@ export async function definirServidorMcpExterno(
   }
   const temRegistro = settings[BOLSO_MCP_EXTERNO] !== undefined;
   // A CHAVE nunca entra no jsonb: sai cifrada, ou zerada quando apagam.
-  const colunas = temRegistro ? cifrarChaveMcpExterno(chave) : SEGREDO_APAGADO;
+  const colunas = temRegistro && temChave ? cifrarChaveMcpExterno(chave) : SEGREDO_APAGADO;
 
   const { error } = await admin
     .from("organizations")
@@ -191,7 +196,7 @@ export async function definirServidorMcpExterno(
       // "de onde vêm essas ferramentas".
       endpoint: temRegistro ? hostDoEndpoint(endpoint) : null,
       registrado: temRegistro,
-      chave_presente: temRegistro,
+      chave_presente: temRegistro && temChave,
       // A lista de ESCRITA liberada (#4445): NOMES de ferramenta, nunca
       // argumento nem payload. Ausente = esta chamada não mexeu na lista.
       ...(listaConexao === null
@@ -201,5 +206,5 @@ export async function definirServidorMcpExterno(
   });
 
   revalidatePath("/app/settings", "layout");
-  return { ok: true, chaveUltimos4: temRegistro ? chave.slice(-4) : null };
+  return { ok: true, chaveUltimos4: temRegistro && temChave ? chave.slice(-4) : null };
 }
