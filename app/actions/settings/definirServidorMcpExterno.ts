@@ -6,11 +6,17 @@
  *
  * ── Quem pode (item 1) ──────────────────────────────────────────────────────
  *
- * O DONO DA INSTALAÇÃO, pela MESMA regra das extensões: `regraPlatformAdmin`
- * (`lib/extensions/http.ts`) cobra `is_platform_admin`, recusa sessão de
- * suporte, exige escopo `full` e cobra `aal2` quando a política da plataforma
- * pede. A regra, e não a `Response` de API que ela também sabe produzir —
- * Server Action não devolve `Response`.
+ * Quem ADMINISTRA a empresa (`podeAdministrarEmpresa`): o administrador da
+ * própria organização, ou o dono da plataforma com escopo `full` quando ele é
+ * membro dela. O servidor é DA empresa e é ela quem o conhece — exigir o dono da
+ * instalação fazia do suporte um passo obrigatório e obrigava o dono a entrar
+ * como membro em cada empresa de cliente só para ligar o recurso.
+ *
+ * Sessão de suporte (acompanhamento) continua recusada: o endereço e a chave de
+ * um sistema de fora não são dado que uma sessão emprestada existe para tocar. O
+ * código do aplicativo de verificação é cobrado como nas demais actions de
+ * escrita (`mfaEmDivida`, que obedece à política da empresa). A recusa vem como
+ * código de permissão — Server Action não devolve `Response`.
  *
  * O gate vem ANTES do `safeParse`: quem não tem permissão recebe recusa de
  * permissão, não `validation_failed`. Um erro de forma dizer "você não pode" e
@@ -42,8 +48,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { regraPlatformAdmin } from "@/lib/extensions/http";
+import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
+import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { supportWriteError } from "@/lib/impersonate/support";
 import { BOLSO_MCP_EXTERNO, conferirEndpointSeguro, hostDoEndpoint, mesclarServidorMcpExterno } from "@/lib/mcp/servidor-externo/registro";
 import {
@@ -108,12 +114,12 @@ export async function definirServidorMcpExterno(
   // nenhuma das duas depende da outra continuar existindo.
   if (supportWriteError(user.support)) return { ok: false, error: "forbidden_role" };
 
-  const regra = await regraPlatformAdmin(user);
-  if (!regra.ok) {
-    return { ok: false, error: regra.codigo === "forbidden" ? "forbidden_role" : regra.codigo };
-  }
+  if (user.support) return { ok: false, error: "forbidden_role" };
+
   const org = await resolveActiveOrg(user);
   if (!org) return { ok: false, error: "forbidden_tenant" };
+  if (!podeAdministrarEmpresa(user, org)) return { ok: false, error: "forbidden_role" };
+  if (await mfaEmDivida()) return { ok: false, error: "mfa_required" };
 
   // 2) Só então a forma.
   const entrada = entradaSchema.safeParse(input);
